@@ -1008,6 +1008,9 @@ int main(int argc, char *argv[])
     shared->setContextProperty("rcloneService", rcloneService);
     shared->setContextProperty("runtimeFeatures", runtimeFeatures);
     shared->setContextProperty("dependencies", dependencies);
+#ifdef HYPRFM_TERMINAL
+    shared->setContextProperty("hyprfmBuiltinTerminal", true);
+#endif
 
     // The main window, compiled once and instantiated per window. The qrc
     // module is qmlcachegen-compiled; the installed on-disk copy is only the

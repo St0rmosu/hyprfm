@@ -238,6 +238,54 @@ ApplicationWindow {
         root.sidebarVisible = !root.sidebarVisible
         root.sidebarWaitingForWidth = false
     }
+
+    // ── Built-in terminal panel ──────────────────────────────────────────────
+    property bool terminalPanelOpen: false
+    // The panel is created on first open and kept while hidden, so the shell
+    // survives F4; it goes when the shell exits.
+    property bool terminalPanelCreated: false
+    // Set by main.cpp in builds with HYPRFM_TERMINAL; tests leave it unset.
+    readonly property bool builtinTerminalAvailable:
+        typeof hyprfmBuiltinTerminal !== "undefined" && hyprfmBuiltinTerminal
+
+    function toggleTerminalPanel() {
+        if (root.terminalPanelOpen)
+            root.closeTerminalPanel()
+        else
+            root.openTerminalPanel("")
+    }
+
+    // Shows the panel. A new shell starts in `path` (or the active folder);
+    // a running one is taken to `path` if it is at its prompt.
+    function openTerminalPanel(path) {
+        if (!root.builtinTerminalAvailable)
+            return
+        root.terminalPanelCreated = true
+        root.terminalPanelOpen = true
+        var view = terminalPanelLoader.item.terminal
+        if (!view.running) {
+            var dir = path || root.panePath(root.activePane)
+            view.workingDirectory = root.isLocalPath(dir) ? dir : ""
+            view.start()
+        } else if (path) {
+            view.changeDirectory(path)
+        }
+        view.forceActiveFocus()
+    }
+
+    function closeTerminalPanel() {
+        root.terminalPanelOpen = false
+        root.scheduleActivePaneFocus()
+    }
+
+    // Open in Terminal, from every menu and the shortcut.
+    function openTerminalAt(path) {
+        if (config.builtinTerminal && root.builtinTerminalAvailable)
+            root.openTerminalPanel(path)
+        else
+            fileOps.openInTerminal(path)
+    }
+
     readonly property int minSidebarWidth: 160
     readonly property int maxSidebarWidth: 480
     property bool sidebarResizeActive: false
@@ -3209,7 +3257,7 @@ ApplicationWindow {
                 }
 
                 onOpenInTerminalRequested: (path) => {
-                    fileOps.openInTerminal(path)
+                    root.openTerminalAt(path)
                 }
 
                 onNewFolderRequested: (parentPath) => {
@@ -3288,7 +3336,7 @@ ApplicationWindow {
 
                 onOpenInTerminalRequested: (path) => {
                     if (path)
-                        fileOps.openInTerminal(path)
+                        root.openTerminalAt(path)
                 }
 
                 onCustomActionRequested: (action) => {
@@ -3642,8 +3690,14 @@ ApplicationWindow {
         onActivated: {
             var path = root.selectedOrCurrentTerminalPath()
             if (root.isLocalPath(path))
-                fileOps.openInTerminal(path)
+                root.openTerminalAt(path)
         }
+    }
+
+    Shortcut {
+        sequence: config.shortcutMap["toggle_terminal"]
+        enabled: root.builtinTerminalAvailable
+        onActivated: root.toggleTerminalPanel()
     }
 
     Shortcut {
@@ -4391,6 +4445,30 @@ ApplicationWindow {
                         }
                     }
                 }
+                }
+
+                Loader {
+                    id: terminalPanelLoader
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: item ? item.implicitHeight : 0
+                    visible: root.terminalPanelOpen
+                    active: root.terminalPanelCreated
+                    // By URL: the file is only in the module when the terminal
+                    // is built in.
+                    source: Qt.resolvedUrl("components/TerminalPanel.qml")
+                    onLoaded: {
+                        item.maximumHeight = Qt.binding(() => root.height * 0.7)
+                        item.windowShortcuts = Qt.binding(() => [config.shortcutMap["toggle_terminal"]])
+                    }
+
+                    Connections {
+                        target: terminalPanelLoader.item
+                        function onFinished() {
+                            root.closeTerminalPanel()
+                            // Not from inside the shell's own signal.
+                            Qt.callLater(() => { root.terminalPanelCreated = false })
+                        }
+                    }
                 }
 
                 StatusBar {

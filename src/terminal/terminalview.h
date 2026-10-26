@@ -57,6 +57,9 @@ public:
     Q_INVOKABLE void start();
     // Types `text` into the shell as if pasted.
     Q_INVOKABLE void sendText(const QString &text);
+    // Types a cd to `dir` if the shell is at its prompt (no program in the
+    // foreground) and returns whether it did.
+    Q_INVOKABLE bool changeDirectory(const QString &dir);
 
     void paint(QPainter *painter) override;
 

@@ -333,6 +333,20 @@ void TerminalView::sendText(const QString &text)
     writePty(utf8.constData(), utf8.size());
 }
 
+bool TerminalView::changeDirectory(const QString &dir)
+{
+    // The shell owns the terminal's foreground process group only while
+    // nothing it started is running, so an editor never gets a cd typed in.
+    if (m_ptyFd < 0 || tcgetpgrp(m_ptyFd) != pid_t(m_pid))
+        return false;
+    QString quoted = dir;
+    quoted.replace(QLatin1Char('\''), QLatin1String("'\\''"));
+    // Ctrl+U drops whatever is half-typed; the leading space keeps the cd
+    // out of history in shells that ignore space-prefixed lines.
+    sendText(QStringLiteral("\x15 cd -- '%1'\r").arg(quoted));
+    return true;
+}
+
 void TerminalView::onWritePty(GhosttyTerminal, void *self, const uint8_t *data, size_t len)
 {
     static_cast<TerminalView *>(self)->writePty(reinterpret_cast<const char *>(data), qsizetype(len));

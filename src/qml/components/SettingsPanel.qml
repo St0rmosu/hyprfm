@@ -82,6 +82,7 @@ Window {
     property bool draftHiddenLast: config.hiddenLast
     property bool draftRightClickToEditPath: config.rightClickToEditPath
     property bool draftSingleClickOpensFolders: config.singleClickOpensFolders
+    property bool draftBuiltinTerminal: config.builtinTerminal
     property bool draftDependencyStartupCheck: config.dependencyStartupCheck
     property bool draftSidebarVisible: currentSidebarVisible
     // Must stay in sync with the quick-access entries in Sidebar.qml.
@@ -270,6 +271,7 @@ Window {
         draftHiddenLast = false
         draftRightClickToEditPath = true
         draftSingleClickOpensFolders = false
+        draftBuiltinTerminal = false
         draftDependencyStartupCheck = true
         draftSidebarVisible = true
         draftHiddenQuickAccess = []
@@ -319,6 +321,7 @@ Window {
             draftHiddenLast = config.hiddenLast
             draftRightClickToEditPath = config.rightClickToEditPath
             draftSingleClickOpensFolders = config.singleClickOpensFolders
+            draftBuiltinTerminal = config.builtinTerminal
             draftDependencyStartupCheck = config.dependencyStartupCheck
             draftSidebarVisible = currentSidebarVisible
             draftHiddenQuickAccess = config.hiddenQuickAccess
@@ -394,6 +397,7 @@ Window {
             hiddenLast: draftHiddenLast,
             rightClickToEditPath: draftRightClickToEditPath,
             singleClickOpensFolders: draftSingleClickOpensFolders,
+            builtinTerminal: draftBuiltinTerminal,
             dependencyStartupCheck: draftDependencyStartupCheck,
             sidebarVisible: draftSidebarVisible,
             hiddenQuickAccess: draftHiddenQuickAccess,
@@ -721,6 +725,17 @@ Window {
                 checked: root.draftSingleClickOpensFolders
                 onToggled: (value) => {
                     root.draftSingleClickOpensFolders = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Toggle {
+                Layout.fillWidth: true
+                visible: typeof hyprfmBuiltinTerminal !== "undefined" && hyprfmBuiltinTerminal
+                label: "Open in Terminal uses the built-in terminal"
+                checked: root.draftBuiltinTerminal
+                onToggled: (value) => {
+                    root.draftBuiltinTerminal = value
                     root.applySettingsNow()
                 }
             }

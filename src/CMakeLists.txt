@@ -187,6 +187,10 @@ list(APPEND hyprfm_qml_module_args
         qml/components/SettingsPanel.qml
 )
 
+if(HYPRFM_TERMINAL)
+    list(APPEND hyprfm_qml_module_args qml/components/TerminalPanel.qml)
+endif()
+
 qt_add_qml_module(hyprfm ${hyprfm_qml_module_args})
 
 # Quill (the src/qml/Quill submodule) is compiled in as its own QML module,

@@ -92,6 +92,7 @@ const ShortcutSpec kShortcutSpecs[] = {
     {"path_bar", "Focus Path Bar"},
     {"toggle_sidebar", "Toggle Sidebar"},
     {"split_view", "Toggle Split View"},
+    {"toggle_terminal", "Toggle Terminal Panel"},
     {"focus_next_pane", "Focus Next Pane"},
     {"focus_previous_pane", "Focus Previous Pane"},
     {"focus_left_pane", "Focus Left Pane"},
@@ -183,6 +184,7 @@ QMap<QString, QString> ConfigManager::s_defaultShortcuts = {
     {"path_bar", "Ctrl+L"},
     {"toggle_sidebar", "F9"},
     {"split_view", "F3"},
+    {"toggle_terminal", "F4"},
     {"focus_next_pane", "F6"},
     {"focus_previous_pane", "Shift+F6"},
     {"focus_left_pane", "Ctrl+Alt+Left"},
@@ -307,6 +309,7 @@ void ConfigManager::setDefaults()
     m_hiddenLast = false;
     m_rightClickToEditPath = true;
     m_singleClickOpensFolders = false;
+    m_builtinTerminal = false;
     m_sortBy = "name";
     m_sortAscending = true;
     m_rememberSortPerFolder = true;
@@ -388,6 +391,8 @@ void ConfigManager::loadConfig()
             m_rightClickToEditPath = *v;
         if (auto v = config["general"]["single_click_opens_folders"].value<bool>())
             m_singleClickOpensFolders = *v;
+        if (auto v = config["general"]["builtin_terminal"].value<bool>())
+            m_builtinTerminal = *v;
         if (auto v = config["general"]["dependency_startup_check"].value<bool>())
             m_dependencyStartupCheck = *v;
         if (auto v = config["general"]["sort_by"].value<std::string>())
@@ -663,6 +668,10 @@ right_click_to_edit_path = true
 # open on double-click; Ctrl/Shift+click still selects.
 single_click_opens_folders = false
 
+# Open in Terminal (menu and shortcut) uses the terminal panel at the bottom
+# of the window instead of $TERMINAL. The panel itself toggles with F4.
+builtin_terminal = false
+
 # Sort order: "name" | "size" | "modified" | "type"
 sort_by = "name"
 sort_ascending = true
@@ -795,6 +804,7 @@ current_fraction = 0.5
 # path_bar          = "Ctrl+L"
 # toggle_sidebar    = "F9"
 # split_view        = "F3"
+# toggle_terminal   = "F4"
 # focus_next_pane   = "F6"
 # focus_previous_pane = "Shift+F6"
 # focus_left_pane   = "Ctrl+Alt+Left"
@@ -934,6 +944,7 @@ bool ConfigManager::showHidden() const { return m_showHidden; }
 bool ConfigManager::hiddenLast() const { return m_hiddenLast; }
 bool ConfigManager::rightClickToEditPath() const { return m_rightClickToEditPath; }
 bool ConfigManager::singleClickOpensFolders() const { return m_singleClickOpensFolders; }
+bool ConfigManager::builtinTerminal() const { return m_builtinTerminal; }
 bool ConfigManager::dependencyStartupCheck() const { return m_dependencyStartupCheck; }
 QString ConfigManager::sortBy() const { return m_sortBy; }
 bool ConfigManager::sortAscending() const { return m_sortAscending; }
@@ -1197,6 +1208,11 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
     if (settings.contains("singleClickOpensFolders")) {
         m_singleClickOpensFolders = settings.value("singleClickOpensFolders").toBool();
         general.insert_or_assign("single_click_opens_folders", m_singleClickOpensFolders);
+    }
+
+    if (settings.contains("builtinTerminal")) {
+        m_builtinTerminal = settings.value("builtinTerminal").toBool();
+        general.insert_or_assign("builtin_terminal", m_builtinTerminal);
     }
 
     if (settings.contains("dependencyStartupCheck")) {

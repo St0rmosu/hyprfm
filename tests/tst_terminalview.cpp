@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QDir>
 #include <QFileInfo>
 #include <QImage>
 #include <QKeyEvent>
@@ -104,6 +105,25 @@ private slots:
         QPainter painter(&image);
         view.paint(&painter);
         QVERIFY(view.running());
+    }
+
+    // changeDirectory types a cd at the prompt, even into a quoted name, and
+    // leaves a running program alone.
+    void testChangeDirectory()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString target = dir.filePath(QStringLiteral("it's here"));
+        QVERIFY(QDir().mkpath(target));
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.start();
+        QTRY_VERIFY_WITH_TIMEOUT(view.changeDirectory(target), 5000);
+        view.sendText(QStringLiteral("touch arrived\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(target + QStringLiteral("/arrived")), 5000);
+
+        view.sendText(QStringLiteral("sleep 5\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(!view.changeDirectory(dir.path()), 5000);
     }
 
     void testExitEndsTheSession()
