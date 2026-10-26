@@ -63,7 +63,10 @@ public:
     Q_INVOKABLE void copy();
     // Types the clipboard (or the primary selection) into the shell, as a
     // bracketed paste when the shell asked for those.
+    // A paste that would run commands (a line break with bracketed paste
+    // off) emits unsafePaste instead; pasteText(text) then pastes it anyway.
     Q_INVOKABLE void paste(bool primarySelection = false);
+    Q_INVOKABLE void pasteText(const QString &text);
 
     void paint(QPainter *painter) override;
 
@@ -75,6 +78,7 @@ signals:
     void fontChanged();
     void colorsChanged();
     void finished();
+    void unsafePaste(const QString &text);
 
 protected:
     bool event(QEvent *event) override;

@@ -15,6 +15,7 @@ Item {
     implicitHeight: 260
 
     signal finished()
+    signal unsafePaste(string text)
 
     // Drag handle on the top edge
     Rectangle {
@@ -46,5 +47,6 @@ Item {
         background: Theme.base
         windowShortcuts: panel.windowShortcuts
         onFinished: panel.finished()
+        onUnsafePaste: (text) => panel.unsafePaste(text)
     }
 }

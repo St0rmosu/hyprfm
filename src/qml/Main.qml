@@ -648,6 +648,7 @@ ApplicationWindow {
             && !root.isShown(root.deleteConfirmDialog)
             && !root.isShown(root.emptyTrashConfirmDialog)
             && !root.isShown(root.customActionConfirmDialog)
+            && !root.isShown(root.terminalPasteConfirmDialog)
             && !root.isShown(root.runExecutableDialog)
             && !(root.quickPreview && root.quickPreview.active)
     }
@@ -3085,6 +3086,42 @@ ApplicationWindow {
     }
     readonly property var customActionConfirmDialog: customActionConfirmDialogLoader.item
 
+    // ── Terminal paste confirmation ──────────────────────────────────────────
+    // The shell has bracketed paste off, so each pasted line would run as
+    // soon as it lands.
+    property string pendingTerminalPaste: ""
+    Loader {
+        id: terminalPasteConfirmDialogLoader
+        objectName: "terminalPasteConfirmDialogLoader"
+        anchors.fill: parent
+        z: 9998
+        active: false
+        sourceComponent: Component {
+            ConfirmDialog {
+                title: "Paste and run?"
+                confirmText: "Paste"
+                confirmVariant: "primary"
+                message: "The clipboard holds more than one line, and this shell runs each line as it is "
+                    + "pasted:\n\n" + root.pendingTerminalPaste.substring(0, 400)
+                    + (root.pendingTerminalPaste.length > 400 ? "…" : "")
+                onAccepted: {
+                    const terminal = terminalPanelLoader.item ? terminalPanelLoader.item.terminal : null
+                    if (terminal) {
+                        terminal.pasteText(root.pendingTerminalPaste)
+                        terminal.forceActiveFocus()
+                    }
+                    root.pendingTerminalPaste = ""
+                }
+                onRejected: {
+                    root.pendingTerminalPaste = ""
+                    if (terminalPanelLoader.item)
+                        terminalPanelLoader.item.terminal.forceActiveFocus()
+                }
+            }
+        }
+    }
+    readonly property var terminalPasteConfirmDialog: terminalPasteConfirmDialogLoader.item
+
     // ── Run Executable Dialog ────────────────────────────────────────────────
     // Activating a program asks instead of handing it to xdg-open, which has
     // no idea how to "open" a script or binary (#48).
@@ -4467,6 +4504,10 @@ ApplicationWindow {
                             root.closeTerminalPanel()
                             // Not from inside the shell's own signal.
                             Qt.callLater(() => { root.terminalPanelCreated = false })
+                        }
+                        function onUnsafePaste(text) {
+                            root.pendingTerminalPaste = text
+                            root.openDialog(terminalPasteConfirmDialogLoader)
                         }
                     }
                 }

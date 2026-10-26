@@ -269,6 +269,33 @@ private slots:
         QCOMPARE(keys.readAll(), QByteArray("\x1b[A"));
     }
 
+    // With bracketed paste off (bash turns it off while a command runs), a
+    // multi-line paste would be typed line by line into whatever reads it;
+    // it is held back for confirmation instead.
+    void testUnbracketedMultiLinePasteAsksFirst()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setWorkingDirectory(dir.path());
+        view.start();
+        view.sendText(QStringLiteral("cat > pasted.txt\n"));
+        QTest::qWait(300);
+        QImage image(640, 240, QImage::Format_RGB32);
+        QPainter painter(&image);
+        view.paint(&painter);
+        QSignalSpy asked(&view, &TerminalView::unsafePaste);
+        QGuiApplication::clipboard()->setText(QStringLiteral("touch first\ntouch second\n"));
+        view.paste();
+        QCOMPARE(asked.count(), 1);
+        QTest::qWait(300);
+        QCOMPARE(QFileInfo(dir.filePath("pasted.txt")).size(), 0);
+
+        view.pasteText(asked.at(0).at(0).toString());
+        QTRY_COMPARE_WITH_TIMEOUT(QFileInfo(dir.filePath("pasted.txt")).size(), 25, 5000);
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;

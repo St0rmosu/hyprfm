@@ -634,11 +634,27 @@ void TerminalView::paste(bool primarySelection)
 {
     if (m_ptyFd < 0)
         return;
-    QByteArray data = QGuiApplication::clipboard()
-                          ->text(primarySelection ? QClipboard::Selection : QClipboard::Clipboard)
-                          .toUtf8();
-    if (data.isEmpty())
+    const QString text = QGuiApplication::clipboard()->text(primarySelection ? QClipboard::Selection
+                                                                             : QClipboard::Clipboard);
+    if (text.isEmpty())
         return;
+    // Without bracketed paste a line break is Enter, so a pasted line would
+    // run before it can be read; Ghostty asks first too. (ESC needs no
+    // question: the encoder below defuses it.)
+    GhosttyTerminalModeConfig bracketed{GHOSTTY_MODE_BRACKETED_PASTE, false};
+    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_MODE, &bracketed);
+    if (!bracketed.value && (text.contains(QLatin1Char('\n')) || text.contains(QLatin1Char('\r')))) {
+        Q_EMIT unsafePaste(text);
+        return;
+    }
+    pasteText(text);
+}
+
+void TerminalView::pasteText(const QString &text)
+{
+    if (m_ptyFd < 0 || text.isEmpty())
+        return;
+    QByteArray data = text.toUtf8();
     // Ghostty's encoder strips control bytes (ESC included, so a pasted
     // end-of-paste marker cannot break out) and brackets the paste when the
     // shell turned that on, so a pasted newline does not run anything.
