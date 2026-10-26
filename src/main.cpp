@@ -707,9 +707,23 @@ int main(int argc, char *argv[])
     // disk label, as it happened). The font database and FreeType are shared
     // across threads under their own locks - only QFontCache is per-thread -
     // so doing it on a worker leaves the GUI thread ~1 ms of engine setup.
-    std::thread([] {
+    // The warm-up workers are joined when main() returns, whatever the path:
+    // a detached one still inside FreeType or vkCreateInstance while exit()
+    // tears the process down crashed it ("free(): invalid size" when Main.qml
+    // failed to load). Declared after app, so they finish before it goes.
+    struct Workers {
+        std::thread font, vulkan;
+        ~Workers()
+        {
+            if (font.joinable())
+                font.join();
+            if (vulkan.joinable())
+                vulkan.join();
+        }
+    } workers;
+    workers.font = std::thread([] {
         QFontMetricsF(QFont()).horizontalAdvance(QStringLiteral("0123456789 GB free of"));
-    }).detach();
+    });
 
     // One process serves every window. Launching HyprFM while it runs hands
     // the request to it over a per-uid unix socket: `hyprfm <path>` adds a tab
@@ -765,11 +779,10 @@ int main(int argc, char *argv[])
     }
 
     // Only once this process knows it will show a window: a launch that hands
-    // off returns from main() at once, and NVIDIA's driver aborts in exit()
-    // when a thread is still inside vkCreateInstance.
+    // off returns from main() at once and should not wait on a driver.
 #if defined(Q_OS_LINUX) && QT_CONFIG(vulkan)
     if (renderer.usesVulkan())
-        std::thread(warmVulkanDriver).detach();
+        workers.vulkan = std::thread(warmVulkanDriver);
 #endif
 
     QQuickStyle::setStyle("Basic");
