@@ -356,6 +356,22 @@ private slots:
         QCOMPARE(mgr2.splitOrientation(), QStringLiteral("horizontal"));
     }
 
+    void testTerminalFontSettings()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.path() + "/config.toml";
+        ConfigManager mgr(path);
+        QCOMPARE(mgr.terminalFontFamily(), QString());
+        QCOMPARE(mgr.terminalFontSize(), 0.0);
+        QCOMPARE(mgr.terminalLigatures(), false);
+        mgr.saveSettings({{"terminalFontFamily", "Maple Mono"}, {"terminalLigatures", true}});
+        mgr.saveSettings({{"terminalFontSize", 13}});
+        ConfigManager mgr2(path);
+        QCOMPARE(mgr2.terminalFontFamily(), QStringLiteral("Maple Mono"));
+        QCOMPARE(mgr2.terminalFontSize(), 13.0);
+        QCOMPARE(mgr2.terminalLigatures(), true);
+    }
+
     void testBookmarkNamesRoundTrip()
     {
         QTemporaryDir dir;

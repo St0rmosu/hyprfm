@@ -44,7 +44,11 @@ Item {
         id: view
         anchors { fill: parent; topMargin: 1 }
         foreground: Theme.text
-        background: Theme.base
+        // Same translucency as the file view, so Hyprland blurs behind it.
+        background: Theme.containerColor(Theme.base, 0.65)
+        fontFamily: config.terminalFontFamily
+        fontSize: config.terminalFontSize
+        ligatures: config.terminalLigatures
         windowShortcuts: panel.windowShortcuts
         onFinished: panel.finished()
         onUnsafePaste: (text) => panel.unsafePaste(text)

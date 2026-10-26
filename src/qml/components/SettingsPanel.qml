@@ -83,6 +83,9 @@ Window {
     property bool draftRightClickToEditPath: config.rightClickToEditPath
     property bool draftSingleClickOpensFolders: config.singleClickOpensFolders
     property bool draftBuiltinTerminal: config.builtinTerminal
+    property string draftTerminalFontFamily: config.terminalFontFamily
+    property real draftTerminalFontSize: config.terminalFontSize
+    property bool draftTerminalLigatures: config.terminalLigatures
     property bool draftDependencyStartupCheck: config.dependencyStartupCheck
     property bool draftSidebarVisible: currentSidebarVisible
     // Must stay in sync with the quick-access entries in Sidebar.qml.
@@ -272,6 +275,9 @@ Window {
         draftRightClickToEditPath = true
         draftSingleClickOpensFolders = false
         draftBuiltinTerminal = false
+        draftTerminalFontFamily = ""
+        draftTerminalFontSize = 0
+        draftTerminalLigatures = false
         draftDependencyStartupCheck = true
         draftSidebarVisible = true
         draftHiddenQuickAccess = []
@@ -322,6 +328,9 @@ Window {
             draftRightClickToEditPath = config.rightClickToEditPath
             draftSingleClickOpensFolders = config.singleClickOpensFolders
             draftBuiltinTerminal = config.builtinTerminal
+            draftTerminalFontFamily = config.terminalFontFamily
+            draftTerminalFontSize = config.terminalFontSize
+            draftTerminalLigatures = config.terminalLigatures
             draftDependencyStartupCheck = config.dependencyStartupCheck
             draftSidebarVisible = currentSidebarVisible
             draftHiddenQuickAccess = config.hiddenQuickAccess
@@ -398,6 +407,9 @@ Window {
             rightClickToEditPath: draftRightClickToEditPath,
             singleClickOpensFolders: draftSingleClickOpensFolders,
             builtinTerminal: draftBuiltinTerminal,
+            terminalFontFamily: draftTerminalFontFamily,
+            terminalFontSize: draftTerminalFontSize,
+            terminalLigatures: draftTerminalLigatures,
             dependencyStartupCheck: draftDependencyStartupCheck,
             sidebarVisible: draftSidebarVisible,
             hiddenQuickAccess: draftHiddenQuickAccess,
@@ -736,6 +748,47 @@ Window {
                 checked: root.draftBuiltinTerminal
                 onToggled: (value) => {
                     root.draftBuiltinTerminal = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Dropdown {
+                id: terminalFontDropdown
+                Layout.fillWidth: true
+                visible: typeof hyprfmBuiltinTerminal !== "undefined" && hyprfmBuiltinTerminal
+                label: "Terminal font"
+                // Only monospace families: the terminal draws on a cell grid.
+                model: visible ? [root.systemFontLabel].concat(config.availableMonospaceFonts) : []
+                previewFont: true
+                currentIndex: root.optionIndex(model, root.draftTerminalFontFamily === "" ? root.systemFontLabel : root.draftTerminalFontFamily, 0)
+                onSelected: (_, value) => {
+                    root.draftTerminalFontFamily = value === root.systemFontLabel ? "" : value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Slider {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                label: root.draftTerminalFontSize > 0 ? "Terminal font size" : "Terminal font size (desktop default)"
+                from: 0
+                to: 32
+                stepSize: 1
+                showValue: true
+                value: root.draftTerminalFontSize
+                onMoved: (value) => {
+                    root.draftTerminalFontSize = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Toggle {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                label: "Terminal ligatures (=> != -> as one symbol)"
+                checked: root.draftTerminalLigatures
+                onToggled: (value) => {
+                    root.draftTerminalLigatures = value
                     root.applySettingsNow()
                 }
             }

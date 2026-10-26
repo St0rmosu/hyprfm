@@ -29,6 +29,10 @@ class TerminalView : public QQuickPaintedItem
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
     Q_PROPERTY(bool running READ running NOTIFY runningChanged)
     Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged)
+    // Overrides on the desktop's monospace font: empty family / size 0 keep it.
+    Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontChanged)
+    Q_PROPERTY(qreal fontSize READ fontSize WRITE setFontSize NOTIFY fontChanged)
+    Q_PROPERTY(bool ligatures READ ligatures WRITE setLigatures NOTIFY fontChanged)
     Q_PROPERTY(QColor foreground READ foreground WRITE setForeground NOTIFY colorsChanged)
     Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY colorsChanged)
     // Shortcuts the window keeps while the terminal has focus (the panel
@@ -46,6 +50,12 @@ public:
     bool running() const { return m_ptyFd >= 0; }
     QFont font() const { return m_font; }
     void setFont(const QFont &font);
+    QString fontFamily() const { return m_fontFamily; }
+    void setFontFamily(const QString &family);
+    qreal fontSize() const { return m_fontSize; }
+    void setFontSize(qreal size);
+    bool ligatures() const { return m_ligatures; }
+    void setLigatures(bool on);
     QColor foreground() const { return m_foreground; }
     void setForeground(const QColor &color);
     QColor background() const { return m_background; }
@@ -98,6 +108,7 @@ private:
     void writePty(const char *data, qsizetype len);
     void stop();
     void sendKey(QKeyEvent *event, GhosttyKeyAction action);
+    void applyFontOverrides();
     void updateCellSize();
     void resizeGrid();
     void applyColors();
@@ -135,6 +146,9 @@ private:
     QString m_title;
     QStringList m_windowShortcuts;
     QFont m_font;
+    QString m_fontFamily;
+    qreal m_fontSize = 0;
+    bool m_ligatures = false;
     // Regular, bold, italic, bold italic: m_font fitted to the cell grid.
     QFont m_cellFonts[4];
     QColor m_foreground = QColor(0xcd, 0xd6, 0xf4);

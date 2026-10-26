@@ -325,6 +325,38 @@ private slots:
         QVERIFY2(rightmost < 6 + 100 * cell + 1, qPrintable(QString::number(rightmost)));
     }
 
+    // A translucent background (window transparency on) stays translucent,
+    // so the compositor's blur shows through behind the shell.
+    void testTranslucentBackgroundKeepsItsAlpha()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(320, 120));
+        view.setBackground(QColor(0x1e, 0x1e, 0x2e, 128));
+        QVERIFY(!view.opaquePainting());
+        QImage image(320, 120, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::white);
+        QPainter painter(&image);
+        view.paint(&painter);
+        painter.end();
+        QCOMPARE(qAlpha(image.pixel(300, 100)), 128);
+
+        view.setBackground(QColor(0x1e, 0x1e, 0x2e));
+        QVERIFY(view.opaquePainting());
+    }
+
+    void testFontOverrides()
+    {
+        TerminalView view;
+        const QFont desktop = view.font();
+        view.setFontSize(23);
+        QCOMPARE(view.font().pointSizeF(), 23.0);
+        QCOMPARE(view.font().family(), desktop.family());
+        view.setFontFamily(QStringLiteral("DejaVu Sans Mono"));
+        QCOMPARE(view.font().family(), QStringLiteral("DejaVu Sans Mono"));
+        view.setFontSize(0);
+        QCOMPARE(view.font().pointSizeF(), desktop.pointSizeF());
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;

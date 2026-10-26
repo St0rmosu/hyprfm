@@ -13,6 +13,7 @@ class ConfigManager : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QStringList availableFonts READ availableFonts CONSTANT)
+    Q_PROPERTY(QStringList availableMonospaceFonts READ availableMonospaceFonts CONSTANT)
     Q_PROPERTY(QStringList availableIconThemes READ availableIconThemes CONSTANT)
     Q_PROPERTY(QStringList availableThemes READ availableThemes CONSTANT)
     Q_PROPERTY(QString theme READ theme NOTIFY configChanged)
@@ -25,6 +26,9 @@ class ConfigManager : public QObject
     Q_PROPERTY(bool rightClickToEditPath READ rightClickToEditPath NOTIFY configChanged)
     Q_PROPERTY(bool singleClickOpensFolders READ singleClickOpensFolders NOTIFY configChanged)
     Q_PROPERTY(bool builtinTerminal READ builtinTerminal NOTIFY configChanged)
+    Q_PROPERTY(QString terminalFontFamily READ terminalFontFamily NOTIFY configChanged)
+    Q_PROPERTY(double terminalFontSize READ terminalFontSize NOTIFY configChanged)
+    Q_PROPERTY(bool terminalLigatures READ terminalLigatures NOTIFY configChanged)
     Q_PROPERTY(bool dependencyStartupCheck READ dependencyStartupCheck NOTIFY configChanged)
     Q_PROPERTY(QString sortBy READ sortBy NOTIFY configChanged)
     Q_PROPERTY(bool sortAscending READ sortAscending NOTIFY configChanged)
@@ -69,6 +73,7 @@ public:
                            const QStringList &themesDirs = QStringList(),
                            const QString &defaultTheme = QStringLiteral("catppuccin-mocha"));
 
+    QStringList availableMonospaceFonts() const;
     QStringList availableFonts() const;
     QStringList availableIconThemes() const;
     QStringList availableThemes() const;
@@ -90,6 +95,9 @@ public:
     bool rightClickToEditPath() const;
     bool singleClickOpensFolders() const;
     bool builtinTerminal() const;
+    QString terminalFontFamily() const { return m_terminalFontFamily; }
+    double terminalFontSize() const { return m_terminalFontSize; }
+    bool terminalLigatures() const { return m_terminalLigatures; }
     bool dependencyStartupCheck() const;
     QString sortBy() const;
     bool sortAscending() const;
@@ -200,6 +208,9 @@ private:
     bool m_rightClickToEditPath;
     bool m_singleClickOpensFolders;
     bool m_builtinTerminal;
+    QString m_terminalFontFamily;
+    double m_terminalFontSize = 0;
+    bool m_terminalLigatures = false;
     bool m_dependencyStartupCheck;
     QString m_sortBy;
     bool m_sortAscending;

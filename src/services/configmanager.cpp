@@ -268,6 +268,18 @@ QStringList ConfigManager::availableFonts() const
     return fonts;
 }
 
+QStringList ConfigManager::availableMonospaceFonts() const
+{
+    const QFontDatabase db;
+    QStringList fonts;
+    for (const QString &family : db.families()) {
+        if (db.isFixedPitch(family) && !fonts.contains(family))
+            fonts.append(family);
+    }
+    fonts.sort(Qt::CaseInsensitive);
+    return fonts;
+}
+
 QStringList ConfigManager::availableIconThemes() const
 {
     QStringList themes;
@@ -310,6 +322,9 @@ void ConfigManager::setDefaults()
     m_rightClickToEditPath = true;
     m_singleClickOpensFolders = false;
     m_builtinTerminal = false;
+    m_terminalFontFamily.clear();
+    m_terminalFontSize = 0;
+    m_terminalLigatures = false;
     m_sortBy = "name";
     m_sortAscending = true;
     m_rememberSortPerFolder = true;
@@ -393,6 +408,14 @@ void ConfigManager::loadConfig()
             m_singleClickOpensFolders = *v;
         if (auto v = config["general"]["builtin_terminal"].value<bool>())
             m_builtinTerminal = *v;
+        if (auto v = config["terminal"]["font_family"].value<std::string>())
+            m_terminalFontFamily = QString::fromStdString(*v).trimmed();
+        if (auto v = config["terminal"]["font_size"].value<double>())
+            m_terminalFontSize = qBound(0.0, *v, 72.0);
+        else if (auto v = config["terminal"]["font_size"].value<int64_t>())
+            m_terminalFontSize = qBound(0.0, double(*v), 72.0);
+        if (auto v = config["terminal"]["ligatures"].value<bool>())
+            m_terminalLigatures = *v;
         if (auto v = config["general"]["dependency_startup_check"].value<bool>())
             m_dependencyStartupCheck = *v;
         if (auto v = config["general"]["sort_by"].value<std::string>())
@@ -681,6 +704,15 @@ remember_sort_per_folder = true
 
 # Warn at startup when a tool HyprFM uses (gvfs, ffmpeg, bat, pdftoppm…) is missing.
 dependency_startup_check = true
+
+[terminal]
+# The built-in terminal (F4). Empty font_family: the desktop's monospace
+# font; font_size 0: its size. Ligatures draw "->", "!=", "=>" as one
+# symbol in fonts that have them (Fira Code, JetBrains Mono, Maple Mono).
+# Its background follows [appearance] transparency, like the file view.
+font_family = ""
+font_size = 0
+ligatures = false
 
 [sidebar]
 # "left" | "right"
@@ -1350,6 +1382,23 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
         appearance.insert_or_assign("anim_curve_exit", m_animCurveExit.toStdString());
         appearance.insert_or_assign("anim_curve_transition", m_animCurveTransition.toStdString());
         config.insert_or_assign("appearance", std::move(appearance));
+    }
+
+    if (settings.contains("terminalFontFamily") || settings.contains("terminalFontSize")
+        || settings.contains("terminalLigatures")) {
+        if (settings.contains("terminalFontFamily"))
+            m_terminalFontFamily = settings.value("terminalFontFamily").toString().trimmed();
+        if (settings.contains("terminalFontSize"))
+            m_terminalFontSize = qBound(0.0, settings.value("terminalFontSize").toDouble(), 72.0);
+        if (settings.contains("terminalLigatures"))
+            m_terminalLigatures = settings.value("terminalLigatures").toBool();
+        toml::table terminal;
+        if (auto existing = config["terminal"].as_table())
+            terminal = *existing;
+        terminal.insert_or_assign("font_family", m_terminalFontFamily.toStdString());
+        terminal.insert_or_assign("font_size", m_terminalFontSize);
+        terminal.insert_or_assign("ligatures", m_terminalLigatures);
+        config.insert_or_assign("terminal", std::move(terminal));
     }
 
     // Window controls

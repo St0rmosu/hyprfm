@@ -134,7 +134,6 @@ TerminalView::TerminalView(QQuickItem *parent)
     setFlag(ItemIsFocusScope);
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton);
     setActiveFocusOnTab(true);
-    setOpaquePainting(true);
     updateCellSize();
 
     ghostty_terminal_new(nullptr, &m_terminal, m_cols, m_rowCount);
@@ -202,6 +201,42 @@ void TerminalView::setFont(const QFont &font)
     update();
 }
 
+void TerminalView::setFontFamily(const QString &family)
+{
+    if (m_fontFamily == family)
+        return;
+    m_fontFamily = family;
+    applyFontOverrides();
+}
+
+void TerminalView::setFontSize(qreal size)
+{
+    if (qFuzzyCompare(m_fontSize, size))
+        return;
+    m_fontSize = size;
+    applyFontOverrides();
+}
+
+void TerminalView::setLigatures(bool on)
+{
+    if (m_ligatures == on)
+        return;
+    m_ligatures = on;
+    updateCellSize();
+    Q_EMIT fontChanged();
+    update();
+}
+
+void TerminalView::applyFontOverrides()
+{
+    QFont font = defaultTerminalFont();
+    if (!m_fontFamily.isEmpty())
+        font.setFamily(m_fontFamily);
+    if (m_fontSize > 0)
+        font.setPointSizeF(m_fontSize);
+    setFont(font);
+}
+
 void TerminalView::setForeground(const QColor &color)
 {
     if (m_foreground == color)
@@ -226,7 +261,10 @@ void TerminalView::applyColors()
     const GhosttyColorRgb bg = rgb(m_background);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg);
-    setFillColor(m_background);
+    // A translucent background lets the compositor's blur show through;
+    // paint() fills with it, so the item's own fill stays clear.
+    setOpaquePainting(m_background.alpha() == 255);
+    setFillColor(Qt::transparent);
     update();
 }
 
@@ -240,16 +278,20 @@ void TerminalView::updateCellSize()
 
     // Runs of cells are drawn as one string, so every glyph has to advance
     // exactly one cell: letter spacing makes up the gap to the whole-pixel
-    // cell, and ligatures and kerning (Maple Mono, Fira Code have both) are
-    // off, since they would move glyphs off their columns.
+    // cell, and kerning is off, since it would move glyphs off their columns.
+    // Ligatures are off unless asked for: monospace ligature fonts (Fira
+    // Code, JetBrains Mono, Maple Mono) keep one glyph per cell, others may
+    // draw a few pixels off the grid.
     for (int variant = 0; variant < 4; ++variant) {
         QFont font = m_font;
         font.setBold(variant & 1);
         font.setItalic(variant & 2);
         font.setKerning(false);
-        font.setFeature(QFont::Tag("liga"), 0);
-        font.setFeature(QFont::Tag("calt"), 0);
-        font.setFeature(QFont::Tag("dlig"), 0);
+        if (!m_ligatures) {
+            font.setFeature(QFont::Tag("liga"), 0);
+            font.setFeature(QFont::Tag("calt"), 0);
+            font.setFeature(QFont::Tag("dlig"), 0);
+        }
         font.setLetterSpacing(QFont::AbsoluteSpacing,
                               m_cellWidth - QFontMetricsF(font).horizontalAdvance(QLatin1Char('M')));
         m_cellFonts[variant] = font;
@@ -856,7 +898,12 @@ void TerminalView::paint(QPainter *painter)
         return;
     GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
     ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_COLORS, &colors);
-    painter->fillRect(boundingRect(), qcolor(colors.background));
+    // Source, not over: the default background carries the view's alpha.
+    QColor background = qcolor(colors.background);
+    background.setAlpha(m_background.alpha());
+    painter->setCompositionMode(QPainter::CompositionMode_Source);
+    painter->fillRect(boundingRect(), background);
+    painter->setCompositionMode(QPainter::CompositionMode_SourceOver);
     if (ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &m_rows)
         != GHOSTTY_SUCCESS)
         return;
