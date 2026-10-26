@@ -3715,6 +3715,8 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         enabled: root.searchMode
+                 && !(contextMenuLoader.item && contextMenuLoader.item.visible)
+                 && !(sidebarContextMenuLoader.item && sidebarContextMenuLoader.item.visible)
                  && !(root.quickPreview && root.quickPreview.active)
                  && !(root.bulkRenameDialog && root.bulkRenameDialog.visible)
                  && !(root.settingsPanel && root.settingsPanel.visible)

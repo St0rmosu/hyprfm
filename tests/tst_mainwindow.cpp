@@ -375,6 +375,22 @@ private slots:
         QTRY_COMPARE(menu->property("effectiveMenuWidth").toInt(), base);
     }
 
+    // The menu never takes focus, so nothing handled Escape and it stayed
+    // open (caught by the Windows showcase run).
+    void testEscapeClosesContextMenu()
+    {
+        App app;
+        QVERIFY(app.load());
+        QVERIFY(app.item("contextMenuLoader")->setProperty("active", true));
+        QQuickItem *menu = app.item("contextMenu");
+        QVERIFY(menu);
+        menu->setProperty("customItems", QVariantList{QVariantMap{{"text", "Open"}, {"action", "noop"}}});
+        QVERIFY(QMetaObject::invokeMethod(menu, "popup", Q_ARG(QVariant, 20), Q_ARG(QVariant, 20)));
+        QTRY_VERIFY(menu->isVisible());
+        QTest::keyClick(app.window, Qt::Key_Escape);
+        QTRY_VERIFY(!menu->isVisible());
+    }
+
     // The Properties dialog is a plain Item overlay, not a Popup, so nothing
     // gave it keyboard focus and Escape fell through to the file view behind
     // it. Opening it and pressing Escape must close it again (issue #28).
