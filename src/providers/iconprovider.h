@@ -112,7 +112,31 @@ public:
         // For file/mime icons: search primary first, then fallbacks
         QString svgPath = findIconIn(iconName, sz, primaryDirs);
 
-
+        // Prefer icons that actually ship with the primary theme (e.g.
+        // MacTahoe's shellscript.svg) over inherited fallback icons.
+        if (svgPath.isEmpty() && !isSymbolic) {
+            QStringList aliases;
+            if (iconName.startsWith(QStringLiteral("text-x-"))) {
+                aliases << QStringLiteral("application-x-") + iconName.mid(7);
+                aliases << iconName.mid(7);
+            } else if (iconName.startsWith(QStringLiteral("application-x-"))) {
+                aliases << QStringLiteral("text-x-") + iconName.mid(14);
+                aliases << iconName.mid(14);
+            } else if (iconName.startsWith(QStringLiteral("application-"))) {
+                aliases << iconName.mid(12);
+            } else if (iconName.startsWith(QStringLiteral("text-"))) {
+                aliases << iconName.mid(5);
+            }
+            aliases << QStringLiteral("gnome-mime-") + iconName;
+            aliases << iconName.section(QLatin1Char('-'), -1);
+            for (const QString &alias : aliases) {
+                if (alias.isEmpty() || alias == iconName)
+                    continue;
+                svgPath = findIconIn(alias, sz, primaryDirs);
+                if (!svgPath.isEmpty())
+                    break;
+            }
+        }
 
         if (svgPath.isEmpty()) {
             if (isSymbolic) {
@@ -136,6 +160,7 @@ public:
                 remember(cacheKey, empty);
                 return empty;
             }
+
         }
 
         QImage img(iconSize, QImage::Format_ARGB32_Premultiplied);
