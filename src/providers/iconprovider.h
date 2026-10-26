@@ -45,7 +45,7 @@ public:
                 m_primaryDirs.append(path);
         }
 
-        const QStringList fallbacks = {"breeze", "Papirus", "Adwaita", "hicolor"};
+        const QStringList fallbacks = {};
         for (const auto &theme : fallbacks) {
             if (theme == themeName)
                 continue;
