@@ -132,6 +132,7 @@ public:
                 break;
         }
 
+
         if (svgPath.isEmpty()) {
             if (isSymbolic) {
                 // Not in primary theme → return empty for PathSvg fallback
@@ -239,7 +240,7 @@ private:
     QString findIconIn(const QString &name, int size, const QStringList &themeDirs) const
     {
         static const QStringList categories = {
-            "actions", "places", "mimetypes", "devices",
+            "actions", "places", "mimetypes", "mimes", "devices",
             "status", "apps", "categories", "emblems"
         };
         static const QStringList extensions = {".svg", ".png"};
