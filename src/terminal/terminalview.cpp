@@ -357,6 +357,13 @@ bool TerminalView::changeDirectory(const QString &dir)
     // nothing it started is running, so an editor never gets a cd typed in.
     if (m_ptyFd < 0 || tcgetpgrp(m_ptyFd) != pid_t(m_pid))
         return false;
+    // The path is typed into the line editor, where control characters are
+    // keys: a folder named "x^C^Mrm -rf ~" would cancel the cd and run the
+    // rest. Quoting cannot stop that, so such paths are not typed at all.
+    for (const QChar c : dir) {
+        if (c.category() == QChar::Other_Control)
+            return false;
+    }
     QString quoted = dir;
     quoted.replace(QLatin1Char('\''), QLatin1String("'\\''"));
     // Ctrl+U drops whatever is half-typed; the leading space keeps the cd

@@ -122,6 +122,9 @@ private slots:
         view.sendText(QStringLiteral("touch arrived\n"));
         QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(target + QStringLiteral("/arrived")), 5000);
 
+        // A control character would act as a key in the line editor.
+        QVERIFY(!view.changeDirectory(dir.path() + QStringLiteral("/x\x03\rtouch pwned")));
+
         view.sendText(QStringLiteral("sleep 5\n"));
         QTRY_VERIFY_WITH_TIMEOUT(!view.changeDirectory(dir.path()), 5000);
     }
