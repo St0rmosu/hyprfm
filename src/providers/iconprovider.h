@@ -110,7 +110,27 @@ public:
         // For symbolic (UI) icons: ONLY search primary theme
         // If not found → return empty so QML uses PathSvg fallback
         // For file/mime icons: search primary first, then fallbacks
-        QString svgPath = findIconIn(iconName, sz, primaryDirs);
+        // Try a few name variants so themes like MacTahoe that store the
+        // same icon under application-*/gnome-mime-* names still resolve.
+        QStringList candidateNames = {iconName};
+        if (!isSymbolic) {
+            if (iconName.startsWith(QStringLiteral("text-x-"))) {
+                candidateNames << QStringLiteral("application-x-") + iconName.mid(7);
+                candidateNames << iconName.mid(7);
+            } else if (iconName.startsWith(QStringLiteral("application-x-"))) {
+                candidateNames << QStringLiteral("text-x-") + iconName.mid(14);
+                candidateNames << iconName.mid(14);
+            } else if (iconName.startsWith(QStringLiteral("application-"))) {
+                candidateNames << QStringLiteral("text-x-") + iconName.mid(12);
+            }
+            candidateNames << QStringLiteral("gnome-mime-") + iconName;
+        }
+        QString svgPath;
+        for (const QString &candidate : candidateNames) {
+            svgPath = findIconIn(candidate, sz, primaryDirs);
+            if (!svgPath.isEmpty())
+                break;
+        }
 
         if (svgPath.isEmpty()) {
             if (isSymbolic) {
