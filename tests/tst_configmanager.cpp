@@ -1,4 +1,5 @@
 #include <QTest>
+#include <QDir>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QFileInfo>
@@ -11,6 +12,45 @@ class TestConfigManager : public QObject
     Q_OBJECT
 
 private slots:
+    void testSplitBookmarkPositionSurvivesReload()
+    {
+        QTemporaryDir dir;
+        ConfigManager config(dir.path() + "/config.toml");
+        const QVariantList splits{
+            QVariantMap{{"name", "Code - Flowchart"}, {"primaryPath", "~/Code"},
+                        {"secondaryPath", "~/Flowchart"}, {"orientation", "horizontal"},
+                        {"position", 1}}
+        };
+        config.saveBookmarks({"~/Documents", "~/Downloads"});
+        config.saveSavedSplits(splits);
+        ConfigManager restored(dir.path() + "/config.toml");
+        QVariantMap expected = splits.first().toMap();
+        expected["primaryPath"] = QDir::homePath() + "/Code";
+        expected["secondaryPath"] = QDir::homePath() + "/Flowchart";
+        QCOMPARE(restored.savedSplits(), QVariantList{expected});
+        QCOMPARE(restored.bookmarks(), QStringList({"~/Documents", "~/Downloads"}));
+    }
+
+    void testLegacySplitKeysArePreserved()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.path() + "/config.toml";
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("[saved_splits]\nsplits = [{ name = 'Code - Flowchart', primaryPath = '~/Code', "
+                   "secondaryPath = '~/Flowchart', orientation = 'horizontal' }]\n");
+        file.close();
+        ConfigManager config(path);
+        QCOMPARE(config.savedSplits().size(), 1);
+        const QVariantMap split = config.savedSplits().first().toMap();
+        QCOMPARE(split.value("name").toString(), QString("Code - Flowchart"));
+        QCOMPARE(split.value("primaryPath").toString(), QDir::homePath() + "/Code");
+        QCOMPARE(split.value("secondaryPath").toString(), QDir::homePath() + "/Flowchart");
+        config.saveSavedSplits(config.savedSplits());
+        ConfigManager restored(path);
+        QCOMPARE(restored.savedSplits(), config.savedSplits());
+    }
+
     void initTestCase()
     {
         QStandardPaths::setTestModeEnabled(true);

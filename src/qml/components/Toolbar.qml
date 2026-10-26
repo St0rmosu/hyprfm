@@ -30,6 +30,7 @@ Rectangle {
     property bool filterPanelOpen: false
     property alias searchBar: searchBarLoader.item
     property alias filterPanel: filterPanelLoader.item
+    readonly property bool pathEditing: breadcrumb.editMode
 
     function startEditing() {
         if (!searchMode) breadcrumb.startEditing()

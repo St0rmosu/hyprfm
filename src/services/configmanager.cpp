@@ -10,6 +10,7 @@
 #include <QKeySequence>
 #include <QSaveFile>
 #include <sstream>
+#include <climits>
 
 namespace {
 
@@ -599,12 +600,18 @@ void ConfigManager::loadConfig()
                     QVariantMap split;
                     if (auto v = (*tbl)["name"].value<std::string>())
                         split.insert("name", QString::fromStdString(*v));
-                    if (auto v = (*tbl)["primary_path"].value<std::string>())
-                        split.insert("primaryPath", expand(*v));
-                    if (auto v = (*tbl)["secondary_path"].value<std::string>())
-                        split.insert("secondaryPath", expand(*v));
+                    // Accept the initial saved-splits format too, so local
+                    // pre-release configurations keep their pairs and names.
+                    auto primary = (*tbl)["primary_path"].value<std::string>();
+                    if (!primary) primary = (*tbl)["primaryPath"].value<std::string>();
+                    auto secondary = (*tbl)["secondary_path"].value<std::string>();
+                    if (!secondary) secondary = (*tbl)["secondaryPath"].value<std::string>();
+                    if (primary) split.insert("primaryPath", expand(*primary));
+                    if (secondary) split.insert("secondaryPath", expand(*secondary));
                     if (auto v = (*tbl)["orientation"].value<std::string>())
                         split.insert("orientation", QString::fromStdString(*v));
+                    if (auto v = (*tbl)["position"].value<int64_t>())
+                        split.insert("position", int(qBound(int64_t(0), *v, int64_t(INT_MAX))));
                     if (split.contains("primaryPath") && split.contains("secondaryPath"))
                         m_savedSplits.append(split);
                 }
@@ -858,8 +865,9 @@ current_fraction = 0.5
 # names = { "~/Projects" = "Work" }
 
 [saved_splits]
-# Saved split views. Reopen both panes of a split layout with one click.
+# Split bookmarks. Reopen both panes of a split layout with one click.
 # Each entry: name, primary_path, secondary_path, orientation ("vertical"|"horizontal").
+# Optional position is the zero-based index among all sidebar bookmarks.
 # splits = [
 #     { name = "Code + Notes", primary_path = "~/Code", secondary_path = "~/Notes", orientation = "vertical" }
 # ]
@@ -1732,6 +1740,8 @@ void ConfigManager::saveSavedSplits(const QVariantList &splits)
             entry.insert_or_assign("secondary_path", secondary.toStdString());
         if (const auto orientation = split.value("orientation").toString(); !orientation.isEmpty())
             entry.insert_or_assign("orientation", orientation.toStdString());
+        if (split.contains("position"))
+            entry.insert_or_assign("position", split.value("position").toInt());
         arr.push_back(std::move(entry));
     }
     config.insert_or_assign("saved_splits", toml::table{{"splits", std::move(arr)}});

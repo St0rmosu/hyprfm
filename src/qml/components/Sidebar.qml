@@ -124,6 +124,7 @@ Rectangle {
 
                 delegate: Rectangle {
                     id: quickAccessDelegate
+                    objectName: "quickAccess_" + model.name
 
                     // Entries the user hid via the sidebar context menu or
                     // Settings → Layout collapse away entirely.
@@ -339,6 +340,7 @@ Rectangle {
                 }
 
                 delegate: Item {
+                    objectName: "bookmark_" + index
                     width: bookmarksList.width
                     height: bookmarksSection.rowHeight
 
@@ -354,7 +356,7 @@ Rectangle {
                         Behavior on opacity { NumberAnimation { duration: 120 } }
 
                         readonly property bool isActive:
-                            !root.isRecentsView && model.path === root.currentPath
+                            !root.isRecentsView && model.path !== "" && model.path === root.currentPath
 
                         color: {
                             if (isActive) return Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
@@ -376,7 +378,7 @@ Rectangle {
                             Loader {
                                 width: 18; height: 18
                                 anchors.verticalCenter: parent.verticalCenter
-                                sourceComponent: iconFolder
+                                sourceComponent: model.split && model.split.primaryPath ? iconSplit : iconFolder
                             }
 
                             Text {
@@ -394,7 +396,7 @@ Rectangle {
                             // losing focus commits (same as renaming a file).
                             Rectangle {
                                 id: bmRenameBox
-                                visible: root.renamingBookmarkIndex === index
+                                visible: root.renamingBookmarkIndex >= 0 && root.renamingBookmarkIndex === index
                                 width: parent.width - 18 - Theme.spacing
                                 height: bookmarksSection.rowHeight - 6
                                 anchors.verticalCenter: parent.verticalCenter
@@ -536,7 +538,9 @@ Rectangle {
                     } else if (mouse.button === Qt.LeftButton && pressIndex >= 0 && pressIndex < bookmarks.count) {
                         var path = bookmarks.data(
                             bookmarks.index(pressIndex, 0), 258 /* PathRole */) || ""
-                        if (path) root.bookmarkClicked(path)
+                        var split = bookmarks.splitAt(pressIndex)
+                        if (split.primaryPath) root.savedSplitClicked(split)
+                        else if (path) root.bookmarkClicked(path)
                     }
                     pressIndex = -1
                     pressButton = Qt.NoButton
@@ -553,7 +557,7 @@ Rectangle {
                     var path = bookmarks.data(bookmarks.index(index, 0), 258 /* PathRole */) || ""
                     var mapped = bmInteraction.mapToItem(null, mouse.x, mouse.y)
                     root.sidebarContextMenuRequested({
-                        kind: "bookmark",
+                        kind: bookmarks.splitAt(index).primaryPath ? "savedSplit" : "bookmark",
                         index: index,
                         name: bookmarks.data(bookmarks.index(index, 0), 257 /* NameRole */) || "",
                         path: path
@@ -607,117 +611,6 @@ Rectangle {
         // Separator between bookmarks and devices
         Rectangle {
             visible: bookmarks.count > 0
-            Layout.fillWidth: true
-            Layout.leftMargin: Theme.spacing
-            Layout.rightMargin: Theme.spacing
-            height: 1
-            color: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.08)
-        }
-
-        // Saved splits section — click to restore both panes
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: savedSplitsList.height
-
-            function displayName(path) {
-                if (!path)
-                    return ""
-                var trimmed = path.replace(/\/$/, "")
-                if (trimmed === "")
-                    return "/"
-                var parts = trimmed.split("/")
-                return parts[parts.length - 1] || trimmed
-            }
-
-            ListView {
-                id: savedSplitsList
-                width: parent.width
-                height: contentHeight
-                interactive: false
-                model: config.savedSplits
-
-                delegate: Item {
-                    width: savedSplitsList.width
-                    height: 32
-                    property var savedSplit: modelData || ({
-                        name: model.name,
-                        primaryPath: model.primaryPath,
-                        secondaryPath: model.secondaryPath,
-                        orientation: model.orientation
-                    })
-
-                    Rectangle {
-                        width: parent.width - Theme.spacing
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        height: 32
-                        color: savedSplitHover.containsMouse
-                            ? Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.07)
-                            : "transparent"
-                        radius: Theme.radiusSmall
-                        Behavior on color { ColorAnimation { duration: Theme.animDuration } }
-
-                        Row {
-                            anchors.left: parent.left
-                            anchors.leftMargin: Theme.spacing
-                            anchors.right: parent.right
-                            anchors.rightMargin: Theme.spacing
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Theme.spacing
-
-                            Loader {
-                                width: 18; height: 18
-                                anchors.verticalCenter: parent.verticalCenter
-                                sourceComponent: iconSplit
-                            }
-
-                            Text {
-                                textFormat: Text.PlainText
-                                text: savedSplit.name
-                                        || displayName(savedSplit.primaryPath) + " + " + displayName(savedSplit.secondaryPath)
-                                color: Theme.text
-                                font.pointSize: Theme.fontNormal
-                                verticalAlignment: Text.AlignVCenter
-                                elide: Text.ElideRight
-                                width: parent.width - 18 - Theme.spacing
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        id: savedSplitHover
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        onClicked: (mouse) => {
-                            if (mouse.button === Qt.RightButton) {
-                                var mapped = savedSplitHover.mapToItem(null, mouse.x, mouse.y)
-                                root.sidebarContextMenuRequested({
-                                    kind: "savedSplit",
-                                    index: index,
-                                    name: savedSplit.name || "",
-                                    primaryPath: savedSplit.primaryPath,
-                                    secondaryPath: savedSplit.secondaryPath,
-                                    orientation: savedSplit.orientation || "vertical"
-                                }, mapped)
-                                return
-                            }
-                            if (!savedSplit.primaryPath || !savedSplit.secondaryPath)
-                                return
-                            root.savedSplitClicked({
-                                name: savedSplit.name || "",
-                                primaryPath: savedSplit.primaryPath,
-                                secondaryPath: savedSplit.secondaryPath,
-                                orientation: savedSplit.orientation || "vertical"
-                            })
-                        }
-                    }
-                }
-            }
-        }
-
-        Rectangle {
-            visible: savedSplitsList.count > 0
             Layout.fillWidth: true
             Layout.leftMargin: Theme.spacing
             Layout.rightMargin: Theme.spacing
