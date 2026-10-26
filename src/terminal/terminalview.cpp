@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QFontDatabase>
 #include <QFontMetricsF>
+#include <QFontInfo>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
@@ -90,6 +91,23 @@ QColor qcolor(const GhosttyColorRgb &c)
     return QColor(c.r, c.g, c.b);
 }
 
+// The desktop's fixed font, or fontconfig's monospace when the platform
+// theme answers with a proportional one (HyprFM's does: Noto Sans), which
+// would size every cell by a wide M.
+QFont defaultTerminalFont()
+{
+    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    if (!QFontInfo(font).fixedPitch()) {
+        const qreal size = font.pointSizeF();
+        font = QFont(QStringLiteral("monospace"));
+        font.setStyleHint(QFont::Monospace);
+        font.setFixedPitch(true);
+        if (size > 0)
+            font.setPointSizeF(size);
+    }
+    return font;
+}
+
 QString ghosttyString(GhosttyTerminal terminal, GhosttyTerminalData data)
 {
     GhosttyString s{};
@@ -102,7 +120,7 @@ QString ghosttyString(GhosttyTerminal terminal, GhosttyTerminalData data)
 
 TerminalView::TerminalView(QQuickItem *parent)
     : QQuickPaintedItem(parent)
-    , m_font(QFontDatabase::systemFont(QFontDatabase::FixedFont))
+    , m_font(defaultTerminalFont())
 {
     setFlag(ItemAcceptsInputMethod);
     setFlag(ItemIsFocusScope);
