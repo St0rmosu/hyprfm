@@ -85,6 +85,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void hoverMoveEvent(QHoverEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
@@ -99,6 +100,8 @@ private:
     GhosttyGridRef refAt(QPointF pos) const;
     bool selectionGesture(GhosttySelectionGestureEvent event, QMouseEvent *mouse);
     void clearSelection();
+    bool reportMouse(GhosttyMouseAction action, GhosttyMouseButton button, QPointF pos,
+                     Qt::KeyboardModifiers modifiers, Qt::MouseButtons held);
 
     static void onWritePty(GhosttyTerminal, void *self, const uint8_t *data, size_t len);
     static bool onSize(GhosttyTerminal, void *self, GhosttySizeReportSize *out);
@@ -116,6 +119,8 @@ private:
     GhosttySelectionGestureEvent m_dragEvent = nullptr;
     GhosttySelectionGestureEvent m_releaseEvent = nullptr;
     bool m_hasSelection = false;
+    GhosttyMouseEncoder m_mouseEncoder = nullptr;
+    GhosttyMouseEvent m_mouseEvent = nullptr;
 
     int m_ptyFd = -1;
     qint64 m_pid = -1;

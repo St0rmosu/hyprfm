@@ -130,7 +130,7 @@ TerminalView::TerminalView(QQuickItem *parent)
 {
     setFlag(ItemAcceptsInputMethod);
     setFlag(ItemIsFocusScope);
-    setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton);
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton);
     setActiveFocusOnTab(true);
     setOpaquePainting(true);
     updateCellSize();
@@ -145,7 +145,10 @@ TerminalView::TerminalView(QQuickItem *parent)
     ghostty_selection_gesture_event_new(nullptr, &m_pressEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_PRESS);
     ghostty_selection_gesture_event_new(nullptr, &m_dragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DRAG);
     ghostty_selection_gesture_event_new(nullptr, &m_releaseEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_RELEASE);
+    ghostty_mouse_encoder_new(nullptr, &m_mouseEncoder);
+    ghostty_mouse_event_new(nullptr, &m_mouseEvent);
     setCursor(Qt::IBeamCursor);
+    setAcceptHoverEvents(true);   // motion reports for programs that track it
 
     const size_t scrollback = 10000;
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &scrollback);
@@ -164,6 +167,8 @@ TerminalView::TerminalView(QQuickItem *parent)
 TerminalView::~TerminalView()
 {
     stop();
+    ghostty_mouse_event_free(m_mouseEvent);
+    ghostty_mouse_encoder_free(m_mouseEncoder);
     ghostty_selection_gesture_event_free(m_releaseEvent);
     ghostty_selection_gesture_event_free(m_dragEvent);
     ghostty_selection_gesture_event_free(m_pressEvent);
@@ -649,9 +654,66 @@ void TerminalView::paste(bool primarySelection)
     writePty(out.constData(), qsizetype(written));
 }
 
+namespace {
+
+GhosttyMouseButton ghosttyButton(Qt::MouseButton button)
+{
+    switch (button) {
+    case Qt::LeftButton: return GHOSTTY_MOUSE_BUTTON_LEFT;
+    case Qt::RightButton: return GHOSTTY_MOUSE_BUTTON_RIGHT;
+    case Qt::MiddleButton: return GHOSTTY_MOUSE_BUTTON_MIDDLE;
+    default: return GHOSTTY_MOUSE_BUTTON_UNKNOWN;
+    }
+}
+
+} // namespace
+
+// Sends a mouse event to the program when it turned mouse tracking on.
+// Shift keeps the mouse for selection, as in other terminals. Returns
+// whether the program got the event.
+bool TerminalView::reportMouse(GhosttyMouseAction action, GhosttyMouseButton button, QPointF pos,
+                               Qt::KeyboardModifiers modifiers, Qt::MouseButtons held)
+{
+    bool tracking = false;
+    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &tracking);
+    if (!tracking || m_ptyFd < 0 || (modifiers & Qt::ShiftModifier))
+        return false;
+
+    GhosttyMouseEncoderSize size = GHOSTTY_INIT_SIZED(GhosttyMouseEncoderSize);
+    size.screen_width = uint32_t(width());
+    size.screen_height = uint32_t(height());
+    size.cell_width = uint32_t(m_cellWidth);
+    size.cell_height = uint32_t(m_cellHeight);
+    size.padding_top = size.padding_bottom = size.padding_left = size.padding_right = uint32_t(Padding);
+    const bool anyPressed = held != Qt::NoButton;
+    ghostty_mouse_encoder_setopt_from_terminal(m_mouseEncoder, m_terminal);
+    ghostty_mouse_encoder_setopt(m_mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+    ghostty_mouse_encoder_setopt(m_mouseEncoder, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &anyPressed);
+
+    ghostty_mouse_event_set_action(m_mouseEvent, action);
+    if (button == GHOSTTY_MOUSE_BUTTON_UNKNOWN)
+        ghostty_mouse_event_clear_button(m_mouseEvent);
+    else
+        ghostty_mouse_event_set_button(m_mouseEvent, button);
+    ghostty_mouse_event_set_mods(m_mouseEvent, ghosttyMods(modifiers));
+    ghostty_mouse_event_set_position(m_mouseEvent, GhosttyMousePosition{float(pos.x()), float(pos.y())});
+
+    char out[64];
+    size_t written = 0;
+    if (ghostty_mouse_encoder_encode(m_mouseEncoder, m_mouseEvent, out, sizeof out, &written) == GHOSTTY_SUCCESS
+        && written > 0)
+        writePty(out, qsizetype(written));
+    return true;
+}
+
 void TerminalView::mousePressEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
+    if (reportMouse(GHOSTTY_MOUSE_ACTION_PRESS, ghosttyButton(event->button()), event->position(), event->modifiers(),
+                    event->buttons())) {
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton)
         selectionGesture(m_pressEvent, event);
     else if (event->button() == Qt::MiddleButton)
@@ -661,6 +723,15 @@ void TerminalView::mousePressEvent(QMouseEvent *event)
 
 void TerminalView::mouseMoveEvent(QMouseEvent *event)
 {
+    const Qt::MouseButton held = event->buttons() & Qt::LeftButton ? Qt::LeftButton
+                               : event->buttons() & Qt::MiddleButton ? Qt::MiddleButton
+                               : event->buttons() & Qt::RightButton ? Qt::RightButton
+                                                                     : Qt::NoButton;
+    if (reportMouse(GHOSTTY_MOUSE_ACTION_MOTION, ghosttyButton(held), event->position(), event->modifiers(),
+                    event->buttons())) {
+        event->accept();
+        return;
+    }
     if (event->buttons() & Qt::LeftButton)
         selectionGesture(m_dragEvent, event);
     event->accept();
@@ -668,6 +739,11 @@ void TerminalView::mouseMoveEvent(QMouseEvent *event)
 
 void TerminalView::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (reportMouse(GHOSTTY_MOUSE_ACTION_RELEASE, ghosttyButton(event->button()), event->position(), event->modifiers(),
+                    event->buttons())) {
+        event->accept();
+        return;
+    }
     // A finished selection becomes the primary selection, for middle click
     // here and in other apps.
     if (event->button() == Qt::LeftButton && selectionGesture(m_releaseEvent, event)) {
@@ -678,18 +754,53 @@ void TerminalView::mouseReleaseEvent(QMouseEvent *event)
     event->accept();
 }
 
+void TerminalView::hoverMoveEvent(QHoverEvent *event)
+{
+    // Motion with no button down only reaches programs in any-event
+    // tracking; the encoder drops it for the other modes.
+    reportMouse(GHOSTTY_MOUSE_ACTION_MOTION, GHOSTTY_MOUSE_BUTTON_UNKNOWN, event->position(), event->modifiers(),
+                Qt::NoButton);
+}
+
 void TerminalView::wheelEvent(QWheelEvent *event)
 {
     // Three lines a notch, like most terminals; touchpads send fractions.
     m_scrollRemainder += event->angleDelta().y() / 120.0 * 3;
     const int lines = int(m_scrollRemainder);
     m_scrollRemainder -= lines;
-    if (lines != 0) {
-        GhosttyTerminalScrollViewport scroll{GHOSTTY_SCROLL_VIEWPORT_DELTA, {}};
-        scroll.value.delta = -lines;
-        ghostty_terminal_scroll_viewport(m_terminal, scroll);
-        update();
+    if (lines == 0) {
+        event->accept();
+        return;
     }
+
+    // A program tracking the mouse gets wheel buttons 4 and 5, one press a
+    // notch.
+    const GhosttyMouseButton wheel = lines > 0 ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE;
+    if (reportMouse(GHOSTTY_MOUSE_ACTION_PRESS, wheel, event->position(), event->modifiers(), Qt::NoButton)) {
+        for (int i = 3; i < qAbs(lines); i += 3)
+            reportMouse(GHOSTTY_MOUSE_ACTION_PRESS, wheel, event->position(), event->modifiers(), Qt::NoButton);
+        event->accept();
+        return;
+    }
+
+    // Full-screen programs without mouse support (less, man) have no
+    // scrollback to show; they get arrow keys instead, as in xterm.
+    GhosttyTerminalScreen screen = GHOSTTY_TERMINAL_SCREEN_PRIMARY;
+    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &screen);
+    if (screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE && m_ptyFd >= 0) {
+        const int key = lines > 0 ? Qt::Key_Up : Qt::Key_Down;
+        for (int i = 0; i < qAbs(lines); ++i) {
+            QKeyEvent arrow(QEvent::KeyPress, key, Qt::NoModifier);
+            sendKey(&arrow, GHOSTTY_KEY_ACTION_PRESS);
+        }
+        event->accept();
+        return;
+    }
+
+    GhosttyTerminalScrollViewport scroll{GHOSTTY_SCROLL_VIEWPORT_DELTA, {}};
+    scroll.value.delta = -lines;
+    ghostty_terminal_scroll_viewport(m_terminal, scroll);
+    update();
     event->accept();
 }
 

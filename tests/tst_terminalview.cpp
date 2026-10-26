@@ -1,4 +1,6 @@
 #include <QTest>
+#include <QFile>
+#include <QWheelEvent>
 #include <QClipboard>
 #include <QFontMetricsF>
 #include <QGuiApplication>
@@ -214,6 +216,57 @@ private slots:
         type(view, QStringLiteral("\n"));
         QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(dir.filePath("pasted")), 5000);
         QVERIFY(QFileInfo::exists(dir.filePath("[201~x")));
+    }
+
+    // A program that turned on mouse tracking gets clicks, encoded in the
+    // format it asked for (SGR here), instead of a selection.
+    void testClickIsReportedToTrackingProgram()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setWorkingDirectory(dir.path());
+        view.start();
+        view.sendText(QStringLiteral("printf '\\033[?1000h\\033[?1006h'; stty raw -echo; "
+                                     "dd bs=1 count=9 of=clicks 2>/dev/null; stty sane\n"));
+        QTest::qWait(400);
+        QImage image(640, 240, QImage::Format_RGB32);
+        QPainter painter(&image);
+        view.paint(&painter);
+        mouse(view, QEvent::MouseButtonPress, cellCentre(view, 2, 1), 1000);
+        mouse(view, QEvent::MouseButtonRelease, cellCentre(view, 2, 1), 1010, Qt::NoButton);
+        QTRY_COMPARE_WITH_TIMEOUT(QFileInfo(dir.filePath("clicks")).size(), 9, 5000);
+        QFile clicks(dir.filePath("clicks"));
+        QVERIFY(clicks.open(QIODevice::ReadOnly));
+        QCOMPARE(clicks.readAll(), QByteArray("\x1b[<0;3;2M"));
+        QCOMPARE(view.selectedText(), QString());
+    }
+
+    // less and man run on the alternate screen without mouse support; the
+    // wheel scrolls them with arrow keys.
+    void testWheelOnAlternateScreenSendsArrows()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setWorkingDirectory(dir.path());
+        view.start();
+        view.sendText(QStringLiteral("printf '\\033[?1049h'; stty raw -echo; "
+                                     "dd bs=1 count=3 of=keys 2>/dev/null; stty sane\n"));
+        QTest::qWait(400);
+        QImage image(640, 240, QImage::Format_RGB32);
+        QPainter painter(&image);
+        view.paint(&painter);
+        const QPointF pos = cellCentre(view, 2, 1);
+        QWheelEvent wheel(pos, view.mapToScene(pos), QPoint(), QPoint(0, 40), Qt::NoButton, Qt::NoModifier,
+                          Qt::NoScrollPhase, false);
+        QCoreApplication::sendEvent(&view, &wheel);
+        QTRY_COMPARE_WITH_TIMEOUT(QFileInfo(dir.filePath("keys")).size(), 3, 5000);
+        QFile keys(dir.filePath("keys"));
+        QVERIFY(keys.open(QIODevice::ReadOnly));
+        QCOMPARE(keys.readAll(), QByteArray("\x1b[A"));
     }
 
     void testExitEndsTheSession()
