@@ -10,6 +10,7 @@
 #include <QPainter>
 #include <QSocketNotifier>
 #include <QUrl>
+#include <QVarLengthArray>
 
 #include <cerrno>
 #include <csignal>
@@ -546,11 +547,13 @@ void TerminalView::paint(QPainter *painter)
                 painter->fillRect(QRectF(x, y, cellWidth, m_cellHeight), qcolor(bg));
 
             if (graphemeLen > 0 && !style.invisible) {
-                uint32_t codepoints[16];
+                // The shell decides the length (any number of combining
+                // marks), so the buffer is sized to it, not fixed.
+                QVarLengthArray<uint32_t, 16> codepoints(graphemeLen);
                 ghostty_render_state_row_cells_get(m_cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF,
-                                                   codepoints);
-                const QString text = QString::fromUcs4(reinterpret_cast<const char32_t *>(codepoints),
-                                                       qMin<qsizetype>(graphemeLen, 16));
+                                                   codepoints.data());
+                const QString text = QString::fromUcs4(reinterpret_cast<const char32_t *>(codepoints.data()),
+                                                       codepoints.size());
                 QColor color = qcolor(fg);
                 if (style.faint)
                     color.setAlphaF(0.6);

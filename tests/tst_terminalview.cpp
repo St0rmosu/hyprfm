@@ -90,6 +90,22 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(redPixels() > 50, 5000);
     }
 
+    // A grapheme longer than any fixed buffer (one base letter and 40
+    // combining marks) paints without overrunning anything; ASan catches a
+    // regression, a plain build at least runs the path.
+    void testLongGraphemeIsPainted()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.start();
+        view.sendText(QStringLiteral("printf 'a'; for i in $(seq 40); do printf '\\314\\201'; done; printf '\\n'\n"));
+        QImage image(640, 240, QImage::Format_RGB32);
+        QTest::qWait(300);
+        QPainter painter(&image);
+        view.paint(&painter);
+        QVERIFY(view.running());
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;
