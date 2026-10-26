@@ -296,6 +296,35 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(QFileInfo(dir.filePath("pasted.txt")).size(), 25, 5000);
     }
 
+    // Runs of cells are drawn as one string; a 100-cell run of "=" (which
+    // ligature fonts like to join) must still end inside cell 100.
+    void testRunsStayOnTheGrid()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(1600, 240));
+        view.setBackground(Qt::black);
+        view.start();
+        view.sendText(QStringLiteral("clear; printf '\\033[31m%s\\033[0m' \"$(printf '=%.0s' $(seq 100))\"; sleep 5\n"));
+        const QFontMetricsF metrics(view.font());
+        const qreal cell = qCeil(metrics.horizontalAdvance(QLatin1Char('M')));
+        int rightmost = -1;
+        QTRY_VERIFY_WITH_TIMEOUT([&] {
+            QImage image(1600, 240, QImage::Format_RGB32);
+            QPainter painter(&image);
+            view.paint(&painter);
+            painter.end();
+            rightmost = -1;
+            for (int y = 0; y < 60; ++y)
+                for (int x = 0; x < image.width(); ++x) {
+                    const QColor c = image.pixelColor(x, y);
+                    if (c.red() > 150 && c.green() < 100 && x > rightmost)
+                        rightmost = x;
+                }
+            return rightmost > 6 + 98 * cell;
+        }(), 5000);
+        QVERIFY2(rightmost < 6 + 100 * cell + 1, qPrintable(QString::number(rightmost)));
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;

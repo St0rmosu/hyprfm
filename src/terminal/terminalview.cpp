@@ -235,6 +235,23 @@ void TerminalView::updateCellSize()
     m_cellWidth = qCeil(metrics.horizontalAdvance(QLatin1Char('M')));
     m_cellHeight = qCeil(metrics.height());
     m_ascent = metrics.ascent();
+
+    // Runs of cells are drawn as one string, so every glyph has to advance
+    // exactly one cell: letter spacing makes up the gap to the whole-pixel
+    // cell, and ligatures and kerning (Maple Mono, Fira Code have both) are
+    // off, since they would move glyphs off their columns.
+    for (int variant = 0; variant < 4; ++variant) {
+        QFont font = m_font;
+        font.setBold(variant & 1);
+        font.setItalic(variant & 2);
+        font.setKerning(false);
+        font.setFeature(QFont::Tag("liga"), 0);
+        font.setFeature(QFont::Tag("calt"), 0);
+        font.setFeature(QFont::Tag("dlig"), 0);
+        font.setLetterSpacing(QFont::AbsoluteSpacing,
+                              m_cellWidth - QFontMetricsF(font).horizontalAdvance(QLatin1Char('M')));
+        m_cellFonts[variant] = font;
+    }
 }
 
 void TerminalView::resizeGrid()
@@ -831,14 +848,34 @@ void TerminalView::paint(QPainter *painter)
         != GHOSTTY_SUCCESS)
         return;
 
-    QFont bold = m_font;
-    bold.setBold(true);
-    QFont italic = m_font;
-    italic.setItalic(true);
-    QFont boldItalic = bold;
-    boldItalic.setItalic(true);
-
+    // Neighbouring cells with the same look are drawn with one drawText;
+    // per cell it was ~5 ms for a full 145x25 screen on a slow laptop.
+    struct Run {
+        QString text;
+        qreal x = 0;
+        int cells = 0;
+        QRgb color = 0;
+        int font = 0;
+        bool underline = false;
+        bool strikethrough = false;
+    } run;
     qreal y = Padding;
+    const auto flush = [&] {
+        if (run.cells == 0)
+            return;
+        painter->setPen(QColor::fromRgba(run.color));
+        painter->setFont(m_cellFonts[run.font]);
+        painter->drawText(QPointF(run.x, y + m_ascent), run.text);
+        const qreal end = run.x + run.cells * m_cellWidth;
+        if (run.underline)
+            painter->drawLine(QPointF(run.x, y + m_ascent + 2), QPointF(end, y + m_ascent + 2));
+        if (run.strikethrough)
+            painter->drawLine(QPointF(run.x, y + m_cellHeight / 2), QPointF(end, y + m_cellHeight / 2));
+        run.text.clear();
+        run.cells = 0;
+    };
+
+    QVarLengthArray<uint32_t, 16> codepoints;
     while (ghostty_render_state_row_iterator_next(m_rows)) {
         if (ghostty_render_state_row_get(m_rows, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &m_cells)
             != GHOSTTY_SUCCESS) {
@@ -877,32 +914,47 @@ void TerminalView::paint(QPainter *painter)
                 ghostty_cell_get(raw, GHOSTTY_CELL_DATA_WIDE, &wide);
             const qreal cellWidth = wide == GHOSTTY_CELL_WIDE_WIDE ? 2 * m_cellWidth : m_cellWidth;
 
+            // Backgrounds go down as the row is walked, before the run that
+            // covers them is drawn at its end.
             if (hasBg)
                 painter->fillRect(QRectF(x, y, cellWidth, m_cellHeight), qcolor(bg));
 
-            if (graphemeLen > 0 && !style.invisible) {
+            const bool drawn = graphemeLen > 0 && !style.invisible;
+            if (drawn) {
                 // The shell decides the length (any number of combining
                 // marks), so the buffer is sized to it, not fixed.
-                QVarLengthArray<uint32_t, 16> codepoints(graphemeLen);
+                codepoints.resize(graphemeLen);
                 ghostty_render_state_row_cells_get(m_cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF,
                                                    codepoints.data());
-                const QString text = QString::fromUcs4(reinterpret_cast<const char32_t *>(codepoints.data()),
-                                                       codepoints.size());
                 QColor color = qcolor(fg);
                 if (style.faint)
                     color.setAlphaF(0.6);
-                painter->setPen(color);
-                painter->setFont(style.bold ? (style.italic ? boldItalic : bold)
-                                            : (style.italic ? italic : m_font));
-                painter->drawText(QPointF(x, y + m_ascent), text);
-                if (style.underline)
-                    painter->drawLine(QPointF(x, y + m_ascent + 2), QPointF(x + cellWidth, y + m_ascent + 2));
-                if (style.strikethrough)
-                    painter->drawLine(QPointF(x, y + m_cellHeight / 2), QPointF(x + cellWidth, y + m_cellHeight / 2));
+                const int font = (style.bold ? 1 : 0) | (style.italic ? 2 : 0);
+                // Only plain ASCII is known to take exactly one cell in the
+                // fitted font; anything else (fallback fonts, wide and
+                // combining characters) is drawn on its own.
+                const bool joinable = graphemeLen == 1 && codepoints[0] < 0x80 && wide == GHOSTTY_CELL_WIDE_NARROW;
+                if (!joinable || run.color != color.rgba() || run.font != font
+                    || run.underline != bool(style.underline) || run.strikethrough != style.strikethrough
+                    || (run.cells > 0 && run.x + run.cells * m_cellWidth != x))
+                    flush();
+                if (run.cells == 0) {
+                    run.x = x;
+                    run.color = color.rgba();
+                    run.font = font;
+                    run.underline = style.underline;
+                    run.strikethrough = style.strikethrough;
+                }
+                run.text += QString::fromUcs4(reinterpret_cast<const char32_t *>(codepoints.data()),
+                                              codepoints.size());
+                run.cells += wide == GHOSTTY_CELL_WIDE_WIDE ? 2 : 1;
+                if (!joinable)
+                    flush();
             }
             x += m_cellWidth;
             ++column;
         }
+        flush();
         y += m_cellHeight;
     }
 

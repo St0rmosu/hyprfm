@@ -135,6 +135,8 @@ private:
     QString m_title;
     QStringList m_windowShortcuts;
     QFont m_font;
+    // Regular, bold, italic, bold italic: m_font fitted to the cell grid.
+    QFont m_cellFonts[4];
     QColor m_foreground = QColor(0xcd, 0xd6, 0xf4);
     QColor m_background = QColor(0x1e, 0x1e, 0x2e);
     qreal m_cellWidth = 8;
