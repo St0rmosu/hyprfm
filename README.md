@@ -77,6 +77,7 @@ HyprFM is a Qt6/QML file manager designed to feel native on Hyprland: lightweigh
 - **Image and video thumbnails** in detailed and Miller views
 - **Quick preview** (`Space`): full-screen overlay for images, video (poster frame), PDFs, text and rendered Markdown, with metadata sidebar
 - **Split pane** (`F3`): work in two directories side by side
+- **Built-in terminal** (`F4`): a shell under the file view, on Ghostty's terminal core (libghostty-vt), with mouse selection, `Ctrl+Shift+C`/`Ctrl+Shift+V`, and mouse support for programs like htop and vim
 
 <div align="center">
 
@@ -237,6 +238,7 @@ The result lands in the repo root as `HyprFM-<version>-x86_64.AppImage`. The scr
 | | Packages |
 |---|---|
 | **Required (build)** | `cmake`, `ninja`, `qt6-base`, `qt6-declarative`, `qt6-svg` |
+| **Built-in terminal (build)** | `zig` 0.17 and network access during the build: CMake downloads a pinned Ghostty commit and Zig fetches its dependencies. Without `zig` on `PATH` the terminal is left out; `-DHYPRFM_TERMINAL=OFF` leaves it out on purpose. |
 | **Required (runtime)** | `qt6-base`, `qt6-declarative`, `qt6-svg`, `qt6-wayland`, `glib2`, `xdg-utils` |
 | **Archives** | `tar`, `gzip`, `bzip2`, `xz`, `zstd`, `zip`, `unzip`, `p7zip` (`7z`), `libarchive` (`bsdtar`). Compress and extract call these by name, so a missing one only breaks that format. |
 | **Optional** | `kwindowsystem` / `KF6WindowSystem` (native KDE blur), `wl-clipboard` (clipboard on Wayland), `fd` (fast search), `bat` (syntax highlighting), `md4c` (rendered Markdown previews via `md2html`; see the note below), `git` (git status overlays), `gvfs` (SFTP/SMB/MTP; not needed for the trash), `gvfs-smb` (SMB), `gvfs-mtp` (Android/MTP phones), `ffmpeg` (video thumbnails), `exiftool` (metadata sidebar), `udisks2` (device mounting), `poppler` / `poppler-utils` (PDF previews via `pdftoppm`) |
@@ -279,6 +281,7 @@ install is needed there.
 | `Ctrl+Scroll` | Zoom (icon size or row height); also Settings → Layout → Icon Size |
 | `Space` | Quick preview |
 | `F3` | Toggle split pane |
+| `F4` | Toggle the built-in terminal |
 | `F9` | Toggle sidebar |
 | `Ctrl+H` | Toggle hidden files |
 | `Ctrl+Shift+B` | Toggle transparency |
@@ -325,7 +328,7 @@ Run `hyprfm --help` for the full list of flags and environment variables.
 | `Ctrl+Shift+N` | New folder |
 | `Ctrl+N` | New file |
 | `Alt+Return` | Properties |
-| `Ctrl+Alt+T` | Open terminal here |
+| `Ctrl+Alt+T` | Open terminal here (`$TERMINAL`, or the built-in one with `builtin_terminal = true`) |
 | `Shift+F10` | Context menu |
 
 Shortcuts can be remapped in `~/.config/hyprfm/config.toml` under the `[shortcuts]` section (see the generated `config.toml.sample` for the full key list). Fixed: `Backspace`, `Alt+1`…`Alt+9`, `Ctrl+PgUp`/`Ctrl+PgDown`, `Ctrl+Scroll`, `Escape`, `Menu`.
@@ -345,6 +348,7 @@ icon_theme = "Adwaita"         # system icon theme fallback
 font_family = ""               # UI font; empty = desktop font
 default_view = "grid"          # grid | detailed | miller
 show_hidden = false
+builtin_terminal = false       # Open in Terminal uses the F4 panel instead of $TERMINAL
 dependency_startup_check = true # warn on startup when a required tool is missing
 sort_by = "name"               # name | size | modified | type
 sort_ascending = true
