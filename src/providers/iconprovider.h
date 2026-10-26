@@ -117,18 +117,18 @@ public:
         if (svgPath.isEmpty() && !isSymbolic) {
             QStringList aliases;
             if (iconName.startsWith(QStringLiteral("text-x-"))) {
-                aliases << QStringLiteral("application-x-") + iconName.mid(7);
                 aliases << iconName.mid(7);
+                aliases << QStringLiteral("application-x-") + iconName.mid(7);
             } else if (iconName.startsWith(QStringLiteral("application-x-"))) {
-                aliases << QStringLiteral("text-x-") + iconName.mid(14);
                 aliases << iconName.mid(14);
+                aliases << QStringLiteral("text-x-") + iconName.mid(14);
             } else if (iconName.startsWith(QStringLiteral("application-"))) {
                 aliases << iconName.mid(12);
             } else if (iconName.startsWith(QStringLiteral("text-"))) {
                 aliases << iconName.mid(5);
             }
-            aliases << QStringLiteral("gnome-mime-") + iconName;
             aliases << iconName.section(QLatin1Char('-'), -1);
+            aliases << QStringLiteral("gnome-mime-") + iconName;
             for (const QString &alias : aliases) {
                 if (alias.isEmpty() || alias == iconName)
                     continue;
@@ -137,6 +137,7 @@ public:
                     break;
             }
         }
+
 
 
         if (svgPath.isEmpty()) {
