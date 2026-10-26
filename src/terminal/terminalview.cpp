@@ -2,6 +2,7 @@
 
 #include <QClipboard>
 #include <QCursor>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFontDatabase>
 #include <QFontMetricsF>
@@ -23,6 +24,7 @@
 #include <csignal>
 #include <fcntl.h>
 #include <pty.h>
+#include <poll.h>
 #include <pwd.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
@@ -351,6 +353,13 @@ void TerminalView::stop()
 void TerminalView::readPty()
 {
     char buf[16384];
+    // The kernel buffers only 4 KB of pty output, so a program printing
+    // fast blocks every 4 KB until we read again. Going back to the event
+    // loop between refills made `seq 500000` take 1.3 s (0.25 s for a plain
+    // reader); waiting up to 1 ms for more, for at most 8 ms per wakeup so
+    // frames still go out, brings it to ~0.4 s.
+    QElapsedTimer budget;
+    budget.start();
     for (;;) {
         const ssize_t n = read(m_ptyFd, buf, sizeof buf);
         if (n > 0) {
@@ -359,8 +368,12 @@ void TerminalView::readPty()
         }
         if (n < 0 && errno == EINTR)
             continue;
-        if (n < 0 && errno == EAGAIN)
+        if (n < 0 && errno == EAGAIN) {
+            pollfd more{m_ptyFd, POLLIN, 0};
+            if (budget.elapsed() < 8 && poll(&more, 1, 1) > 0)
+                continue;
             break;
+        }
         // EOF, or EIO once the shell has exited.
         stop();
         Q_EMIT finished();
