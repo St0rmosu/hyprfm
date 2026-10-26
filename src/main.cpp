@@ -698,11 +698,6 @@ int main(int argc, char *argv[])
     };
     mark("QGuiApplication ready");
 
-#if QT_CONFIG(vulkan)
-    if (renderer.usesVulkan())
-        std::thread(warmVulkanDriver).detach();
-#endif
-
     // The first string any Qt process measures costs ~7 ms: fontconfig matches
     // the family, FreeType loads the face, and the shaper initialises. That
     // used to land on whichever Text item QML built first (the status bar's
@@ -765,6 +760,14 @@ int main(int argc, char *argv[])
             isPrimary = ipcServer->isListening();
         }
     }
+
+    // Only once this process knows it will show a window: a launch that hands
+    // off returns from main() at once, and NVIDIA's driver aborts in exit()
+    // when a thread is still inside vkCreateInstance.
+#if defined(Q_OS_LINUX) && QT_CONFIG(vulkan)
+    if (renderer.usesVulkan())
+        std::thread(warmVulkanDriver).detach();
+#endif
 
     QQuickStyle::setStyle("Basic");
 
