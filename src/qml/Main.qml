@@ -273,14 +273,22 @@ ApplicationWindow {
         view.forceActiveFocus()
     }
 
+    function otherTerminalItems() {
+        if (!root.builtinTerminalAvailable)
+            return []
+        return [{ text: config.builtinTerminal ? "Open in External Terminal" : "Open in Built-in Terminal",
+                  shortcut: "", action: "terminal_other" }]
+    }
+
     function closeTerminalPanel() {
         root.terminalPanelOpen = false
         root.scheduleActivePaneFocus()
     }
 
-    // Open in Terminal, from every menu and the shortcut.
-    function openTerminalAt(path) {
-        if (config.builtinTerminal && root.builtinTerminalAvailable)
+    // Open in Terminal, from every menu and the shortcut. `other` picks the
+    // kind the setting does not, for the second menu entry.
+    function openTerminalAt(path, other) {
+        if (root.builtinTerminalAvailable && config.builtinTerminal !== !!other)
             root.openTerminalPanel(path)
         else
             fileOps.openInTerminal(path)
@@ -3296,6 +3304,7 @@ ApplicationWindow {
                 onOpenInTerminalRequested: (path) => {
                     root.openTerminalAt(path)
                 }
+                onOpenInOtherTerminalRequested: (path) => root.openTerminalAt(path, true)
 
                 onNewFolderRequested: (parentPath) => {
                     root.showNewFolderDialog(parentPath)
@@ -3374,6 +3383,10 @@ ApplicationWindow {
                 onOpenInTerminalRequested: (path) => {
                     if (path)
                         root.openTerminalAt(path)
+                }
+                onOpenInOtherTerminalRequested: (path) => {
+                    if (path)
+                        root.openTerminalAt(path, true)
                 }
 
                 onCustomActionRequested: (action) => {
@@ -3851,6 +3864,7 @@ ApplicationWindow {
                 { text: "Open in Split View", shortcut: "", action: "split_open", icon: "SquareSplitHorizontal" },
                 { separator: true },
                 { text: "Open in Terminal", shortcut: "", action: "terminal" },
+                ...root.otherTerminalItems(),
                 { text: "Properties", shortcut: "", action: "properties" },
                 { separator: true },
                 hideEntry
@@ -3864,6 +3878,7 @@ ApplicationWindow {
                 { text: "Open in Split View", shortcut: "", action: "split_open", icon: "SquareSplitHorizontal" },
                 { separator: true },
                 { text: "Open in Terminal", shortcut: "", action: "terminal" },
+                ...root.otherTerminalItems(),
                 { text: "Properties", shortcut: "", action: "properties" },
                 { separator: true },
                 { text: "Rename", shortcut: "", action: "renamebookmark" },
@@ -3891,6 +3906,7 @@ ApplicationWindow {
                 { text: "Open in Split View", shortcut: "", action: "split_open", icon: "SquareSplitHorizontal" },
                 { separator: true },
                 { text: "Open in Terminal", shortcut: "", action: "terminal" },
+                ...root.otherTerminalItems(),
                 { text: "Properties", shortcut: "", action: "properties" },
                 { separator: true },
                 { text: "Unmount", shortcut: "", action: "unmountdevice" }
