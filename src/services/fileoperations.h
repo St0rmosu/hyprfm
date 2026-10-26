@@ -129,6 +129,9 @@ signals:
     // trashFiles() hit paths whose filesystem has no trash; the UI should
     // offer to delete them permanently.
     void trashUnsupported(const QStringList &paths);
+    // openFile() found no default app chosen for the file's type; the UI
+    // should let the user pick one, which then becomes the default.
+    void appChoiceNeeded(const QString &path, const QString &mimeType);
 
 private slots:
     void onExtractFolderChosen(uint response, const QVariantMap &results);
