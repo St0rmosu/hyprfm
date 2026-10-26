@@ -232,9 +232,25 @@ private:
                     return path;
             }
 
+            // Pattern 1b: category/scalable/name.svg (Breeze, MacTahoe, ...)
+            for (const auto &cat : categories) {
+                for (const auto &ext : extensions) {
+                    QString path = themeDir + "/" + cat + "/scalable/" + name + ext;
+                    if (QFile::exists(path))
+                        return path;
+                }
+            }
+
             // Pattern 2: symbolic/category/name.svg (Adwaita symbolic)
             for (const auto &cat : categories) {
                 QString path = themeDir + "/symbolic/" + cat + "/" + name + ".svg";
+                if (QFile::exists(path))
+                    return path;
+            }
+
+            // Pattern 2b: category/symbolic/name.svg (Breeze, MacTahoe, ...)
+            for (const auto &cat : categories) {
+                QString path = themeDir + "/" + cat + "/symbolic/" + name + ".svg";
                 if (QFile::exists(path))
                     return path;
             }
