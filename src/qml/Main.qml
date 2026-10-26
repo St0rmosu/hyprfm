@@ -3109,8 +3109,8 @@ ApplicationWindow {
                 title: "Paste and run?"
                 confirmText: "Paste"
                 confirmVariant: "primary"
-                message: "The clipboard holds more than one line, and this shell runs each line as it is "
-                    + "pasted:\n\n" + root.pendingTerminalPaste.substring(0, 400)
+                message: "The clipboard holds more than one line, and what is running in the terminal "
+                    + "gets each line as soon as it is pasted, as if Enter were pressed:\n\n" + root.pendingTerminalPaste.substring(0, 400)
                     + (root.pendingTerminalPaste.length > 400 ? "…" : "")
                 onAccepted: {
                     const terminal = terminalPanelLoader.item ? terminalPanelLoader.item.terminal : null
