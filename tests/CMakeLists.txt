@@ -348,3 +348,15 @@ add_executable(tst_recentfilesmodel tst_recentfilesmodel.cpp
 target_include_directories(tst_recentfilesmodel PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(tst_recentfilesmodel PRIVATE Qt6::Test Qt6::Core Qt6::Concurrent)
 add_test(NAME tst_recentfilesmodel COMMAND tst_recentfilesmodel)
+
+# The built-in terminal (libghostty-vt) driving a real /bin/sh in a pty.
+if(HYPRFM_TERMINAL)
+    add_executable(tst_terminalview tst_terminalview.cpp
+        ${CMAKE_SOURCE_DIR}/src/terminal/terminalview.cpp
+        ${CMAKE_SOURCE_DIR}/src/terminal/terminalview.h
+    )
+    target_include_directories(tst_terminalview PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(tst_terminalview PRIVATE Qt6::Test Qt6::Quick ghostty-vt-static util)
+    add_test(NAME tst_terminalview COMMAND tst_terminalview)
+    set_tests_properties(tst_terminalview PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()

@@ -32,6 +32,12 @@ set(HYPRFM_SOURCES
 
 qt_add_executable(hyprfm ${HYPRFM_SOURCES})
 
+if(HYPRFM_TERMINAL)
+    target_sources(hyprfm PRIVATE terminal/terminalview.cpp terminal/terminalview.h)
+    target_link_libraries(hyprfm PRIVATE ghostty-vt-static util)
+    target_compile_definitions(hyprfm PRIVATE HYPRFM_TERMINAL)
+endif()
+
 option(HYPRFM_ENABLE_PCH "Enable precompiled headers (faster builds)" ON)
 option(HYPRFM_ENABLE_UNITY_BUILD "Enable unity builds (faster clean builds)" ON)
 
