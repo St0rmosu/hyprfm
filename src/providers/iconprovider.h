@@ -138,6 +138,7 @@ public:
             }
         }
 
+
         if (svgPath.isEmpty()) {
             if (isSymbolic) {
                 // Not in primary theme → return empty for PathSvg fallback
