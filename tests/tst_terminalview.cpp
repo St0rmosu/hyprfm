@@ -1,4 +1,8 @@
 #include <QTest>
+#include <QClipboard>
+#include <QFontMetricsF>
+#include <QGuiApplication>
+#include <QMouseEvent>
 #include <QDir>
 #include <QFileInfo>
 #include <QImage>
@@ -25,6 +29,36 @@ class TestTerminalView : public QObject
             QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier, keyText);
             QCoreApplication::sendEvent(&view, &release);
         }
+    }
+
+    // Centre of a cell, matching TerminalView's 6 px padding and whole-pixel cells.
+    static QPointF cellCentre(const TerminalView &view, int column, int row)
+    {
+        const QFontMetricsF metrics(view.font());
+        const qreal w = qCeil(metrics.horizontalAdvance(QLatin1Char('M')));
+        const qreal h = qCeil(metrics.height());
+        return QPointF(6 + column * w + w / 2, 6 + row * h + h / 2);
+    }
+
+    static void mouse(TerminalView &view, QEvent::Type type, QPointF pos, ulong time,
+                      Qt::MouseButtons buttons = Qt::LeftButton)
+    {
+        QMouseEvent event(type, pos, view.mapToScene(pos), view.mapToScene(pos), Qt::LeftButton,
+                          buttons, Qt::NoModifier);
+        event.setTimestamp(time);
+        QCoreApplication::sendEvent(&view, &event);
+    }
+
+    // A view with "hello world" on its top row and nothing else.
+    static void showHelloWorld(TerminalView &view)
+    {
+        view.setSize(QSizeF(640, 240));
+        view.start();
+        view.sendText(QStringLiteral("clear; printf 'hello world'; sleep 5\n"));
+        QTest::qWait(400);
+        QImage image(640, 240, QImage::Format_RGB32);
+        QPainter painter(&image);
+        view.paint(&painter);   // folds the output into the render state
     }
 
 private slots:
@@ -127,6 +161,59 @@ private slots:
 
         view.sendText(QStringLiteral("sleep 5\n"));
         QTRY_VERIFY_WITH_TIMEOUT(!view.changeDirectory(dir.path()), 5000);
+    }
+
+    // Dragging across cells selects them; Ctrl+Shift+C copies the text.
+    void testDragSelectsAndCopies()
+    {
+        TerminalView view;
+        showHelloWorld(view);
+        mouse(view, QEvent::MouseButtonPress, cellCentre(view, 0, 0), 1000);
+        // A cell joins the selection once the pointer passes its middle.
+        const QPointF end = (cellCentre(view, 4, 0) + cellCentre(view, 5, 0)) / 2 - QPointF(1, 0);
+        mouse(view, QEvent::MouseMove, end, 1010);
+        mouse(view, QEvent::MouseButtonRelease, end, 1020, Qt::NoButton);
+        QCOMPARE(view.selectedText(), QStringLiteral("hello"));
+
+        QGuiApplication::clipboard()->clear();
+        QKeyEvent copy(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier);
+        QCoreApplication::sendEvent(&view, &copy);
+        QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("hello"));
+    }
+
+    // A double click selects the word under it; a plain click clears it.
+    void testDoubleClickSelectsWord()
+    {
+        TerminalView view;
+        showHelloWorld(view);
+        const QPointF w = cellCentre(view, 7, 0);
+        mouse(view, QEvent::MouseButtonPress, w, 2000);
+        mouse(view, QEvent::MouseButtonRelease, w, 2010, Qt::NoButton);
+        mouse(view, QEvent::MouseButtonPress, w, 2050);
+        mouse(view, QEvent::MouseButtonRelease, w, 2060, Qt::NoButton);
+        QCOMPARE(view.selectedText(), QStringLiteral("world"));
+
+        mouse(view, QEvent::MouseButtonPress, cellCentre(view, 2, 0), 9000);
+        mouse(view, QEvent::MouseButtonRelease, cellCentre(view, 2, 0), 9010, Qt::NoButton);
+        QCOMPARE(view.selectedText(), QString());
+    }
+
+    // Ctrl+Shift+V types the clipboard; escape bytes in it are defused, so
+    // a paste cannot smuggle a terminal sequence in.
+    void testPasteTypesTheClipboard()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setWorkingDirectory(dir.path());
+        view.start();
+        QGuiApplication::clipboard()->setText(QStringLiteral("touch pasted\x1b[201~x"));
+        QKeyEvent paste(QEvent::KeyPress, Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier);
+        QCoreApplication::sendEvent(&view, &paste);
+        type(view, QStringLiteral("\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(dir.filePath("pasted")), 5000);
+        QVERIFY(QFileInfo::exists(dir.filePath("[201~x")));
     }
 
     void testExitEndsTheSession()

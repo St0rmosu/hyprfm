@@ -36,6 +36,9 @@ if(HYPRFM_TERMINAL)
     target_sources(hyprfm PRIVATE terminal/terminalview.cpp terminal/terminalview.h)
     target_link_libraries(hyprfm PRIVATE ghostty-vt-static util)
     target_compile_definitions(hyprfm PRIVATE HYPRFM_TERMINAL)
+    # It undefines Qt's emit macro (Ghostty has an `emit` field); a unity
+    # batch would carry that into the next file.
+    set_source_files_properties(terminal/terminalview.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 endif()
 
 option(HYPRFM_ENABLE_PCH "Enable precompiled headers (faster builds)" ON)

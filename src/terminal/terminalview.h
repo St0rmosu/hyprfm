@@ -4,7 +4,6 @@
 #include <QFont>
 #include <QQuickPaintedItem>
 #include <QStringList>
-#include <QtQml/qqmlregistration.h>
 
 // Ghostty names a struct field `emit`, which Qt defines away as a macro.
 #pragma push_macro("emit")
@@ -20,7 +19,6 @@ class QSocketNotifier;
 class TerminalView : public QQuickPaintedItem
 {
     Q_OBJECT
-    QML_ELEMENT
 
     // Where the shell starts. Later changes are not sent to a running shell;
     // see changeDirectory().
@@ -60,6 +58,12 @@ public:
     // Types a cd to `dir` if the shell is at its prompt (no program in the
     // foreground) and returns whether it did.
     Q_INVOKABLE bool changeDirectory(const QString &dir);
+    // The selected text, empty when nothing is selected.
+    Q_INVOKABLE QString selectedText() const;
+    Q_INVOKABLE void copy();
+    // Types the clipboard (or the primary selection) into the shell, as a
+    // bracketed paste when the shell asked for those.
+    Q_INVOKABLE void paste(bool primarySelection = false);
 
     void paint(QPainter *painter) override;
 
@@ -79,6 +83,8 @@ protected:
     void inputMethodEvent(QInputMethodEvent *event) override;
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
@@ -90,6 +96,9 @@ private:
     void updateCellSize();
     void resizeGrid();
     void applyColors();
+    GhosttyGridRef refAt(QPointF pos) const;
+    bool selectionGesture(GhosttySelectionGestureEvent event, QMouseEvent *mouse);
+    void clearSelection();
 
     static void onWritePty(GhosttyTerminal, void *self, const uint8_t *data, size_t len);
     static bool onSize(GhosttyTerminal, void *self, GhosttySizeReportSize *out);
@@ -102,6 +111,11 @@ private:
     GhosttyRenderStateRowCells m_cells = nullptr;
     GhosttyKeyEncoder m_keyEncoder = nullptr;
     GhosttyKeyEvent m_keyEvent = nullptr;
+    GhosttySelectionGesture m_gesture = nullptr;
+    GhosttySelectionGestureEvent m_pressEvent = nullptr;
+    GhosttySelectionGestureEvent m_dragEvent = nullptr;
+    GhosttySelectionGestureEvent m_releaseEvent = nullptr;
+    bool m_hasSelection = false;
 
     int m_ptyFd = -1;
     qint64 m_pid = -1;

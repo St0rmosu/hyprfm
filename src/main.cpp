@@ -59,6 +59,9 @@
 #include "providers/thumbnailprovider.h"
 #include "providers/iconprovider.h"
 #include "providers/pdfpreviewprovider.h"
+#ifdef HYPRFM_TERMINAL
+#include "terminal/terminalview.h"
+#endif
 #include <QIcon>
 #include <QEvent>
 #include <functional>
@@ -1009,6 +1012,10 @@ int main(int argc, char *argv[])
     shared->setContextProperty("runtimeFeatures", runtimeFeatures);
     shared->setContextProperty("dependencies", dependencies);
 #ifdef HYPRFM_TERMINAL
+    // Registered here rather than with QML_ELEMENT: the generated type
+    // registration does not include the header, so it only compiled when a
+    // unity batch happened to.
+    qmlRegisterType<TerminalView>("HyprFM", 1, 0, "TerminalView");
     shared->setContextProperty("hyprfmBuiltinTerminal", true);
 #endif
 

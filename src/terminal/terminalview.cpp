@@ -1,5 +1,7 @@
 #include "terminal/terminalview.h"
 
+#include <QClipboard>
+#include <QCursor>
 #include <QFile>
 #include <QFontDatabase>
 #include <QFontMetricsF>
@@ -10,8 +12,12 @@
 #include <QKeySequence>
 #include <QPainter>
 #include <QSocketNotifier>
+#include <QStyleHints>
 #include <QUrl>
 #include <QVarLengthArray>
+
+// Ghostty structs have an `emit` field; this file signals with Q_EMIT.
+#undef emit
 
 #include <cerrno>
 #include <csignal>
@@ -135,6 +141,11 @@ TerminalView::TerminalView(QQuickItem *parent)
     ghostty_render_state_row_cells_new(nullptr, &m_cells);
     ghostty_key_encoder_new(nullptr, &m_keyEncoder);
     ghostty_key_event_new(nullptr, &m_keyEvent);
+    ghostty_selection_gesture_new(nullptr, &m_gesture);
+    ghostty_selection_gesture_event_new(nullptr, &m_pressEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_PRESS);
+    ghostty_selection_gesture_event_new(nullptr, &m_dragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DRAG);
+    ghostty_selection_gesture_event_new(nullptr, &m_releaseEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_RELEASE);
+    setCursor(Qt::IBeamCursor);
 
     const size_t scrollback = 10000;
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &scrollback);
@@ -153,6 +164,10 @@ TerminalView::TerminalView(QQuickItem *parent)
 TerminalView::~TerminalView()
 {
     stop();
+    ghostty_selection_gesture_event_free(m_releaseEvent);
+    ghostty_selection_gesture_event_free(m_dragEvent);
+    ghostty_selection_gesture_event_free(m_pressEvent);
+    ghostty_selection_gesture_free(m_gesture, m_terminal);
     ghostty_key_event_free(m_keyEvent);
     ghostty_key_encoder_free(m_keyEncoder);
     ghostty_render_state_row_cells_free(m_cells);
@@ -166,7 +181,7 @@ void TerminalView::setWorkingDirectory(const QString &dir)
     if (m_workingDirectory == dir)
         return;
     m_workingDirectory = dir;
-    emit workingDirectoryChanged();
+    Q_EMIT workingDirectoryChanged();
 }
 
 void TerminalView::setFont(const QFont &font)
@@ -176,7 +191,7 @@ void TerminalView::setFont(const QFont &font)
     m_font = font;
     updateCellSize();
     resizeGrid();
-    emit fontChanged();
+    Q_EMIT fontChanged();
     update();
 }
 
@@ -186,7 +201,7 @@ void TerminalView::setForeground(const QColor &color)
         return;
     m_foreground = color;
     applyColors();
-    emit colorsChanged();
+    Q_EMIT colorsChanged();
 }
 
 void TerminalView::setBackground(const QColor &color)
@@ -195,7 +210,7 @@ void TerminalView::setBackground(const QColor &color)
         return;
     m_background = color;
     applyColors();
-    emit colorsChanged();
+    Q_EMIT colorsChanged();
 }
 
 void TerminalView::applyColors()
@@ -285,7 +300,7 @@ void TerminalView::start()
     m_pid = pid;
     m_notifier = new QSocketNotifier(fd, QSocketNotifier::Read, this);
     connect(m_notifier, &QSocketNotifier::activated, this, &TerminalView::readPty);
-    emit runningChanged();
+    Q_EMIT runningChanged();
 }
 
 void TerminalView::stop()
@@ -308,7 +323,7 @@ void TerminalView::stop()
         }
         m_pid = -1;
     }
-    emit runningChanged();
+    Q_EMIT runningChanged();
 }
 
 void TerminalView::readPty()
@@ -326,7 +341,7 @@ void TerminalView::readPty()
             break;
         // EOF, or EIO once the shell has exited.
         stop();
-        emit finished();
+        Q_EMIT finished();
         break;
     }
     update();
@@ -391,7 +406,7 @@ void TerminalView::onTitleChanged(GhosttyTerminal terminal, void *self)
 {
     auto *view = static_cast<TerminalView *>(self);
     view->m_title = ghosttyString(terminal, GHOSTTY_TERMINAL_DATA_TITLE);
-    emit view->titleChanged();
+    Q_EMIT view->titleChanged();
 }
 
 void TerminalView::onPwdChanged(GhosttyTerminal terminal, void *self)
@@ -403,7 +418,7 @@ void TerminalView::onPwdChanged(GhosttyTerminal terminal, void *self)
     const QString pwd = ghosttyString(terminal, GHOSTTY_TERMINAL_DATA_PWD);
     const QUrl url(pwd);
     view->m_shellDirectory = url.isLocalFile() ? url.path(QUrl::FullyDecoded) : pwd;
-    emit view->shellDirectoryChanged();
+    Q_EMIT view->shellDirectoryChanged();
 }
 
 bool TerminalView::event(QEvent *event)
@@ -473,6 +488,21 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         event->ignore();
         return;
     }
+    // Terminal copy and paste keys: Ctrl+C and Ctrl+V belong to the shell.
+    const QKeyCombination combo = event->keyCombination();
+    if (combo == QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_C)) {
+        copy();
+        event->accept();
+        return;
+    }
+    if (combo == QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_V)
+        || combo == QKeyCombination(Qt::ShiftModifier, Qt::Key_Insert)) {
+        paste();
+        event->accept();
+        return;
+    }
+    if (m_hasSelection)
+        clearSelection();
     // Typing jumps back to the prompt from wherever scrollback was.
     ghostty_terminal_scroll_viewport(m_terminal, GhosttyTerminalScrollViewport{
         GHOSTTY_SCROLL_VIEWPORT_BOTTOM, {}});
@@ -511,9 +541,140 @@ QVariant TerminalView::inputMethodQuery(Qt::InputMethodQuery query) const
     return QQuickPaintedItem::inputMethodQuery(query);
 }
 
+GhosttyGridRef TerminalView::refAt(QPointF pos) const
+{
+    GhosttyPoint point{};
+    point.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+    point.value.coordinate.x = uint16_t(qBound(0, int((pos.x() - Padding) / m_cellWidth), m_cols - 1));
+    point.value.coordinate.y = uint32_t(qBound(0, int((pos.y() - Padding) / m_cellHeight), m_rowCount - 1));
+    GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+    ghostty_terminal_grid_ref(m_terminal, point, &ref);
+    return ref;
+}
+
+// Runs one press, drag or release through Ghostty's gesture state machine
+// (cell drag, word on double click, line on triple) and installs the
+// selection it yields. Returns whether there is one.
+bool TerminalView::selectionGesture(GhosttySelectionGestureEvent event, QMouseEvent *mouse)
+{
+    const GhosttyGridRef ref = refAt(mouse->position());
+    const GhosttySurfacePosition position{mouse->position().x(), mouse->position().y()};
+    ghostty_selection_gesture_event_set(event, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF, &ref);
+    if (event != m_releaseEvent)
+        ghostty_selection_gesture_event_set(event, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_POSITION, &position);
+    if (event == m_pressEvent) {
+        const uint64_t time = uint64_t(mouse->timestamp()) * 1000000;
+        const uint64_t interval = uint64_t(QGuiApplication::styleHints()->mouseDoubleClickInterval()) * 1000000;
+        const double distance = QGuiApplication::styleHints()->mouseDoubleClickDistance();
+        ghostty_selection_gesture_event_set(event, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_TIME_NS, &time);
+        ghostty_selection_gesture_event_set(event, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REPEAT_INTERVAL_NS, &interval);
+        ghostty_selection_gesture_event_set(event, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REPEAT_DISTANCE, &distance);
+    }
+    if (event == m_dragEvent) {
+        const GhosttySelectionGestureGeometry geometry{m_cols, uint32_t(m_cellWidth), uint32_t(Padding),
+                                                       uint32_t(qMax(1.0, height()))};
+        ghostty_selection_gesture_event_set(event, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY, &geometry);
+        const bool rectangle = mouse->modifiers() & Qt::AltModifier;
+        ghostty_selection_gesture_event_set(event, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_RECTANGLE, &rectangle);
+    }
+
+    GhosttySelection selection = GHOSTTY_INIT_SIZED(GhosttySelection);
+    const GhosttyResult result = ghostty_selection_gesture_event(m_gesture, m_terminal, event, &selection);
+    if (event == m_releaseEvent)
+        return m_hasSelection;
+    if (result == GHOSTTY_SUCCESS) {
+        ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &selection);
+        m_hasSelection = true;
+    } else if (event == m_pressEvent) {
+        clearSelection();
+    }
+    update();
+    return m_hasSelection;
+}
+
+void TerminalView::clearSelection()
+{
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr);
+    m_hasSelection = false;
+    update();
+}
+
+QString TerminalView::selectedText() const
+{
+    if (!m_hasSelection)
+        return {};
+    // Plain text with soft wraps joined and trailing blanks trimmed, as
+    // Ghostty itself copies.
+    GhosttyTerminalSelectionFormatOptions options = GHOSTTY_INIT_SIZED(GhosttyTerminalSelectionFormatOptions);
+    options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
+    options.unwrap = true;
+    options.trim = true;
+    uint8_t *buf = nullptr;
+    size_t len = 0;
+    if (ghostty_terminal_selection_format_alloc(m_terminal, nullptr, options, &buf, &len) != GHOSTTY_SUCCESS)
+        return {};
+    const QString text = QString::fromUtf8(reinterpret_cast<const char *>(buf), qsizetype(len));
+    ghostty_free(nullptr, buf, len);
+    return text;
+}
+
+void TerminalView::copy()
+{
+    const QString text = selectedText();
+    if (!text.isEmpty())
+        QGuiApplication::clipboard()->setText(text);
+}
+
+void TerminalView::paste(bool primarySelection)
+{
+    if (m_ptyFd < 0)
+        return;
+    QByteArray data = QGuiApplication::clipboard()
+                          ->text(primarySelection ? QClipboard::Selection : QClipboard::Clipboard)
+                          .toUtf8();
+    if (data.isEmpty())
+        return;
+    // Ghostty's encoder strips control bytes (ESC included, so a pasted
+    // end-of-paste marker cannot break out) and brackets the paste when the
+    // shell turned that on, so a pasted newline does not run anything.
+    GhosttyTerminalModeConfig bracketed{GHOSTTY_MODE_BRACKETED_PASTE, false};
+    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_MODE, &bracketed);
+    QByteArray out(data.size() + 16, Qt::Uninitialized);
+    size_t written = 0;
+    if (ghostty_paste_encode(data.data(), size_t(data.size()), bracketed.value, out.data(),
+                             size_t(out.size()), &written) != GHOSTTY_SUCCESS)
+        return;
+    ghostty_terminal_scroll_viewport(m_terminal, GhosttyTerminalScrollViewport{
+        GHOSTTY_SCROLL_VIEWPORT_BOTTOM, {}});
+    writePty(out.constData(), qsizetype(written));
+}
+
 void TerminalView::mousePressEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
+    if (event->button() == Qt::LeftButton)
+        selectionGesture(m_pressEvent, event);
+    else if (event->button() == Qt::MiddleButton)
+        paste(true);
+    event->accept();
+}
+
+void TerminalView::mouseMoveEvent(QMouseEvent *event)
+{
+    if (event->buttons() & Qt::LeftButton)
+        selectionGesture(m_dragEvent, event);
+    event->accept();
+}
+
+void TerminalView::mouseReleaseEvent(QMouseEvent *event)
+{
+    // A finished selection becomes the primary selection, for middle click
+    // here and in other apps.
+    if (event->button() == Qt::LeftButton && selectionGesture(m_releaseEvent, event)) {
+        QClipboard *clipboard = QGuiApplication::clipboard();
+        if (clipboard->supportsSelection())
+            clipboard->setText(selectedText(), QClipboard::Selection);
+    }
     event->accept();
 }
 
@@ -557,6 +718,10 @@ void TerminalView::paint(QPainter *painter)
             y += m_cellHeight;
             continue;
         }
+        GhosttyRenderStateRowSelection selected = GHOSTTY_INIT_SIZED(GhosttyRenderStateRowSelection);
+        const bool rowSelected = ghostty_render_state_row_get(m_rows, GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION,
+                                                              &selected) == GHOSTTY_SUCCESS;
+        int column = 0;
         qreal x = Padding;
         while (ghostty_render_state_row_cells_next(m_cells)) {
             uint32_t graphemeLen = 0;
@@ -569,7 +734,10 @@ void TerminalView::paint(QPainter *painter)
             GhosttyColorRgb bg = colors.background;
             bool hasBg = ghostty_render_state_row_cells_get(
                              m_cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR, &bg) == GHOSTTY_SUCCESS;
-            if (style.inverse) {
+            // Selected cells are drawn inverted, so the selection shows in
+            // any theme and over any colours the program chose.
+            const bool cellSelected = rowSelected && column >= selected.start_x && column <= selected.end_x;
+            if (style.inverse != cellSelected) {
                 std::swap(fg, bg);
                 hasBg = true;
             }
@@ -606,6 +774,7 @@ void TerminalView::paint(QPainter *painter)
                     painter->drawLine(QPointF(x, y + m_cellHeight / 2), QPointF(x + cellWidth, y + m_cellHeight / 2));
             }
             x += m_cellWidth;
+            ++column;
         }
         y += m_cellHeight;
     }
