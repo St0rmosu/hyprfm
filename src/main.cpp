@@ -400,6 +400,10 @@ private:
 struct AppWindow : public QObject
 {
     using QObject::QObject;
+    // The window goes first: children are deleted in creation order, so the
+    // models made before it would vanish under its live bindings ("Cannot
+    // read property 'activeTab' of null" on every close).
+    ~AppWindow() override { delete window; }
     TabListModel *tabModel = nullptr;
     SessionState *sessionState = nullptr;
     QQuickWindow *window = nullptr;
