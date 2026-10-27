@@ -107,6 +107,44 @@ private slots:
         QStandardPaths::setTestModeEnabled(true);
     }
 
+    // Opening a file uses the app chosen in mimeapps.list, or one chosen for a
+    // parent type (Markdown is text/plain), and asks only when none was ever
+    // chosen. Test mode keeps the user's own mimeapps.list out of it.
+    void testOpenFileAsksOnlyWithoutAChosenDefault()
+    {
+        const QString config = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+        const QString apps = QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation);
+        QVERIFY(QDir().mkpath(config));
+        QVERIFY(QDir().mkpath(apps));
+        const QString list = config + "/mimeapps.list";
+        const QString entry = apps + "/hyprfm-test-true.desktop";
+        QFile::remove(list);
+        const auto cleanup = qScopeGuard([&] { QFile::remove(list); QFile::remove(entry); });
+        const auto write = [](const QString &path, const QByteArray &data) {
+            QFile file(path);
+            return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
+        };
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString notes = dir.filePath("notes.md");
+        QVERIFY(write(notes, "# notes\n"));
+
+        FileOperations ops;
+        QSignalSpy asked(&ops, &FileOperations::appChoiceNeeded);
+        ops.openFile(notes);
+        QCOMPARE(asked.count(), 1);
+        QCOMPARE(asked.at(0).at(0).toString(), notes);
+        QCOMPARE(asked.at(0).at(1).toString(), QStringLiteral("text/markdown"));
+
+        // An entry that runs `true`, so the launch shows nothing.
+        QVERIFY(write(entry, "[Desktop Entry]\nType=Application\nName=Test\nExec=true %f\n"));
+        QVERIFY(write(list, "[Default Applications]\ntext/plain=hyprfm-test-true.desktop\n"));
+        ops.openFile(notes);
+        QCOMPARE(asked.count(), 1);
+        QTest::qWait(300);   // let gio launch finish before ops goes away
+    }
+
     // --- Desktop entry Exec= parsing (Open With) ---
 
     void testDesktopExecArguments()

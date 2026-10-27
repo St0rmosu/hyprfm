@@ -8,7 +8,6 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
-#include <QDesktopServices>
 #include <QDir>
 #include <QDirIterator>
 #include <QThread>
@@ -17,6 +16,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QMimeData>
+#include <QMimeDatabase>
 #include <QPixmap>
 #include <QRandomGenerator>
 #include <QRegularExpression>
@@ -157,6 +157,56 @@ QString desktopEntryPath(const QString &desktopId)
         const QString candidate = QDir(dir).filePath(desktopId);
         if (QFile::exists(candidate))
             return candidate;
+    }
+    return {};
+}
+
+// The app the user chose for this type in mimeapps.list's [Default
+// Applications], trying the type, its aliases, then its parents (text/markdown
+// falls back to text/plain); empty when they never chose one. GLib's default
+// lookup also falls back to any app that merely lists the type, which hands
+// CSV files to a chat app; here that case asks the user instead.
+QString chosenDefaultApp(const QString &mimeType)
+{
+    QStringList files;
+    const QStringList desktops =
+        qEnvironmentVariable("XDG_CURRENT_DESKTOP").toLower().split(QLatin1Char(':'), Qt::SkipEmptyParts);
+    for (const QString &dir : QStandardPaths::standardLocations(QStandardPaths::GenericConfigLocation)) {
+        for (const QString &desktop : desktops)
+            files << dir + QLatin1Char('/') + desktop + QStringLiteral("-mimeapps.list");
+        files << dir + QStringLiteral("/mimeapps.list");
+    }
+    // The older location, still read by xdg-mime and GLib.
+    for (const QString &dir : QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation))
+        files << dir + QStringLiteral("/mimeapps.list");
+
+    QList<QHash<QString, QString>> defaults;
+    for (const QString &path : std::as_const(files)) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+        QHash<QString, QString> section;
+        bool inDefaults = false;
+        while (!file.atEnd()) {
+            const QString line = QString::fromUtf8(file.readLine()).trimmed();
+            if (line.startsWith(QLatin1Char('[')))
+                inDefaults = line == QLatin1String("[Default Applications]");
+            else if (inDefaults && line.contains(QLatin1Char('=')))
+                section.insert(line.section(QLatin1Char('='), 0, 0).trimmed(),
+                               line.section(QLatin1Char('='), 1).trimmed());
+        }
+        defaults.append(section);
+    }
+
+    const QMimeType type = QMimeDatabase().mimeTypeForName(mimeType);
+    const QStringList names = QStringList{mimeType} + type.aliases() + type.allAncestors();
+    for (const QString &name : names) {
+        for (const auto &section : std::as_const(defaults)) {
+            for (const QString &id : section.value(name).split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
+                if (!desktopEntryPath(id).isEmpty())
+                    return id;
+            }
+        }
     }
     return {};
 }
@@ -1704,27 +1754,27 @@ void FileOperations::openFile(const QString &path)
         return;
     }
 
-    // Local files. Outside a sandbox: hand off to Qt's QDesktopServices
-    // (which uses xdg-open / kde-open / gio-launch under the hood and
-    // honors the user's MIME associations). Inside a Flatpak: shell out
-    // to `flatpak-spawn --host xdg-open` so the host opens the file with
-    // the host's default app, completely bypassing the sandbox. This is
-    // the same pattern Nautilus and Dolphin use when running as Flatpaks.
+    // Local files inside a Flatpak: shell out to `flatpak-spawn --host
+    // xdg-open` so the host opens the file with the host's default app,
+    // completely bypassing the sandbox. This is the same pattern Nautilus
+    // and Dolphin use when running as Flatpaks.
     if (runningInFlatpak()) {
         proc->start(QStringLiteral("flatpak-spawn"),
                     {QStringLiteral("--host"), QStringLiteral("xdg-open"), normalized});
         return;
     }
 
+    // Outside one: launch the default app ourselves. Not QDesktopServices:
+    // Qt 6.12 sends that through the desktop portal, whose OpenURI shows its
+    // own app picker for every file until the same app has been picked
+    // several times, whatever mimeapps.list says.
     proc->deleteLater();
-    const QUrl url = QUrl::fromLocalFile(normalized);
-    if (!QDesktopServices::openUrl(url)) {
-        // Logged only, once: double-clicking a file with no registered handler
-        // did nothing whatsoever from the user's side.
-        emit operationFinished(false,
-            QStringLiteral("Nothing is set up to open %1")
-                .arg(locationFileName(normalized)));
-    }
+    const QString mimeType = QMimeDatabase().mimeTypeForFile(normalized).name();
+    const QString app = chosenDefaultApp(mimeType);
+    if (app.isEmpty())
+        emit appChoiceNeeded(normalized, mimeType);
+    else
+        openFileWith(normalized, app);
 }
 
 bool FileOperations::pathExists(const QString &path) const

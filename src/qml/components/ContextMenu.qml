@@ -346,6 +346,14 @@ Item {
         submenuCloseAnim.restart()
     }
 
+    // The menu never takes keyboard focus (the view keeps it), so Esc has to
+    // be a window shortcut. Main's own Esc shortcut stands down while open.
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.visible
+        onActivated: root.close()
+    }
+
     function close() {
         _pendingPopup = false
         openAnim.stop()

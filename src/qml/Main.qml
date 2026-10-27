@@ -2120,6 +2120,8 @@ ApplicationWindow {
 
                 property string filePath: ""
                 property string mimeType: ""
+                // Opened because the type has no default yet: the pick becomes it.
+                property bool makeDefault: false
                 property var allApps: []
                 property string searchText: ""
 
@@ -2132,6 +2134,7 @@ ApplicationWindow {
 
                 onClosed: {
                     appChooserDialog.allApps = []
+                    appChooserDialog.makeDefault = false
                     if (root.isShown(root.propertiesDialog) && root.propertiesDialog.props.mimeType)
                         root.propertiesDialog.apps = root.propertiesDialog.fileModelRef.availableApps(root.propertiesDialog.props.mimeType)
                 }
@@ -2208,6 +2211,8 @@ ApplicationWindow {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
+                                            if (appChooserDialog.makeDefault && appChooserDialog.mimeType !== "")
+                                                root.paneBaseModel(root.activePane).setDefaultApp(appChooserDialog.mimeType, modelData.desktopFile)
                                             fileOps.openFileWith(appChooserDialog.filePath, modelData.desktopFile)
                                             appChooserDialog.close()
                                         }
@@ -3710,6 +3715,8 @@ ApplicationWindow {
     Shortcut {
         sequence: "Escape"
         enabled: root.searchMode
+                 && !(contextMenuLoader.item && contextMenuLoader.item.visible)
+                 && !(sidebarContextMenuLoader.item && sidebarContextMenuLoader.item.visible)
                  && !(root.quickPreview && root.quickPreview.active)
                  && !(root.bulkRenameDialog && root.bulkRenameDialog.visible)
                  && !(root.settingsPanel && root.settingsPanel.visible)
@@ -4481,6 +4488,14 @@ ApplicationWindow {
 
         function onPasswordRequested(archivePath, destination, retry) {
             root.askArchivePassword(archivePath, destination, retry)
+        }
+
+        function onAppChoiceNeeded(path, mimeType) {
+            appChooserDialogLoader.active = true
+            root.appChooserDialog.filePath = path
+            root.appChooserDialog.mimeType = mimeType
+            root.appChooserDialog.makeDefault = true
+            root.appChooserDialog.open()
         }
 
         function onTrashUnsupported(paths) {
