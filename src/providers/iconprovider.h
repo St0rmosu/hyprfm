@@ -45,7 +45,44 @@ public:
                 m_primaryDirs.append(path);
         }
 
-        const QStringList fallbacks = {"hicolor", "breeze"};
+        // The theme's own Inherits= chain first (MacTahoe -> hicolor), so a
+        // file icon it lacks comes from the theme it builds on; then the
+        // common full themes, so a theme with few mimetype icons still gets
+        // coloured ones instead of a blank.
+        QStringList fallbacks;
+        QStringList pending = {themeName};
+        while (!pending.isEmpty()) {
+            const QString theme = pending.takeFirst();
+            for (const auto &dir : m_searchDirs) {
+                // Only the Inherits= line: QSettings would parse the whole
+                // file, and Papirus lists thousands of directories in it.
+                QFile index(dir + "/" + theme + "/index.theme");
+                if (!index.open(QIODevice::ReadOnly | QIODevice::Text))
+                    continue;
+                QString inherits;
+                while (!index.atEnd()) {
+                    const QByteArray line = index.readLine().trimmed();
+                    if (line.startsWith("Inherits=")) {
+                        inherits = QString::fromUtf8(line.mid(9));
+                        break;
+                    }
+                    if (line.startsWith("[") && line != "[Icon Theme]")
+                        break;   // Inherits lives in [Icon Theme], which comes first
+                }
+                for (QString parent : inherits.split(QLatin1Char(','))) {
+                    parent = parent.trimmed();
+                    if (!parent.isEmpty() && parent != themeName && !fallbacks.contains(parent)) {
+                        fallbacks.append(parent);
+                        pending.append(parent);
+                    }
+                }
+                break;
+            }
+        }
+        for (const QString theme : {"breeze", "Papirus", "Adwaita", "hicolor"}) {
+            if (!fallbacks.contains(theme))
+                fallbacks.append(theme);
+        }
         for (const auto &theme : fallbacks) {
             if (theme == themeName)
                 continue;
@@ -127,7 +164,6 @@ public:
             } else if (iconName.startsWith(QStringLiteral("text-"))) {
                 aliases << iconName.mid(5);
             }
-            aliases << iconName.section(QLatin1Char('-'), -1);
             aliases << QStringLiteral("gnome-mime-") + iconName;
             for (const QString &alias : aliases) {
                 if (alias.isEmpty() || alias == iconName)
@@ -137,8 +173,6 @@ public:
                     break;
             }
         }
-
-
 
         if (svgPath.isEmpty()) {
             if (isSymbolic) {
@@ -162,7 +196,6 @@ public:
                 remember(cacheKey, empty);
                 return empty;
             }
-
         }
 
         QImage img(iconSize, QImage::Format_ARGB32_Premultiplied);
