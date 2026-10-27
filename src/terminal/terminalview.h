@@ -56,6 +56,9 @@ public:
     void setFontSize(qreal size);
     bool ligatures() const { return m_ligatures; }
     void setLigatures(bool on);
+    // The desktop's monospace font (the portal's monospace-font-name), the
+    // default before any fontFamily/fontSize override.
+    static void setDesktopFont(const QString &family, qreal pointSize);
     QColor foreground() const { return m_foreground; }
     void setForeground(const QColor &color);
     QColor background() const { return m_background; }

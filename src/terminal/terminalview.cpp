@@ -99,11 +99,24 @@ QColor qcolor(const GhosttyColorRgb &c)
     return QColor(c.r, c.g, c.b);
 }
 
-// The desktop's fixed font, or fontconfig's monospace when the platform
-// theme answers with a proportional one (HyprFM's does: Noto Sans), which
-// would size every cell by a wide M.
+QString s_desktopFamily;
+qreal s_desktopPointSize = 0;
+
+// The desktop's monospace font, as GTK terminals use it. Without one, Qt's
+// fixed font, or fontconfig's monospace when the platform theme answers with
+// a proportional one (HyprFM's does: Noto Sans), which would size every cell
+// by a wide M. Qt's fixed font comes from qt6ct here, which can disagree
+// with the desktop (Maple Mono 13 against Adwaita Mono 11).
 QFont defaultTerminalFont()
 {
+    if (!s_desktopFamily.isEmpty()) {
+        QFont font(s_desktopFamily);
+        font.setStyleHint(QFont::Monospace);
+        if (s_desktopPointSize > 0)
+            font.setPointSizeF(s_desktopPointSize);
+        if (QFontInfo(font).fixedPitch())
+            return font;
+    }
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     if (!QFontInfo(font).fixedPitch()) {
         const qreal size = font.pointSizeF();
@@ -225,6 +238,12 @@ void TerminalView::setLigatures(bool on)
     updateCellSize();
     Q_EMIT fontChanged();
     update();
+}
+
+void TerminalView::setDesktopFont(const QString &family, qreal pointSize)
+{
+    s_desktopFamily = family;
+    s_desktopPointSize = pointSize;
 }
 
 void TerminalView::applyFontOverrides()

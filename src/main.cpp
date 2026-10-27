@@ -445,6 +445,8 @@ struct DesktopSettings
     QString iconTheme;
     QString fontFamily;
     qreal fontPointSize = 0;
+    QString monospaceFamily;
+    qreal monospacePointSize = 0;
     QString fontHinting;   // none / slight / medium / full, as the desktop sets it
 };
 
@@ -493,20 +495,24 @@ DesktopSettings readDesktopSettings()
     settings.iconTheme = readKey(QStringLiteral("icon-theme")).trimmed();
     settings.fontHinting = readKey(QStringLiteral("font-hinting")).trimmed();
 
-    // font-name is Pango's format: family, optional style words, then the size
-    // ("Adwaita Sans 11", "Cantarell Bold 12").
-    const QString fontName = readKey(QStringLiteral("font-name")).trimmed();
-    if (!fontName.isEmpty()) {
+    // Font names are Pango's format: family, optional style words, then the
+    // size ("Adwaita Sans 11", "Cantarell Bold 12").
+    const auto readFont = [&](const QString &key, QString &family, qreal &pointSize) {
+        const QString fontName = readKey(key).trimmed();
+        if (fontName.isEmpty())
+            return;
         const qsizetype lastSpace = fontName.lastIndexOf(QLatin1Char(' '));
         bool isNumber = false;
         const qreal size = lastSpace > 0 ? fontName.mid(lastSpace + 1).toDouble(&isNumber) : 0;
         if (isNumber && size > 0) {
-            settings.fontFamily = fontName.left(lastSpace).trimmed();
-            settings.fontPointSize = size;
+            family = fontName.left(lastSpace).trimmed();
+            pointSize = size;
         } else {
-            settings.fontFamily = fontName;
+            family = fontName;
         }
-    }
+    };
+    readFont(QStringLiteral("font-name"), settings.fontFamily, settings.fontPointSize);
+    readFont(QStringLiteral("monospace-font-name"), settings.monospaceFamily, settings.monospacePointSize);
     return settings;
 }
 
@@ -1033,6 +1039,7 @@ int main(int argc, char *argv[])
     // registration does not include the header, so it only compiled when a
     // unity batch happened to.
     qmlRegisterType<TerminalView>("HyprFM", 1, 0, "TerminalView");
+    TerminalView::setDesktopFont(desktop.monospaceFamily, desktop.monospacePointSize);
     shared->setContextProperty("hyprfmBuiltinTerminal", true);
 #endif
 
