@@ -246,6 +246,24 @@ void TerminalView::setDesktopFont(const QString &family, qreal pointSize)
     s_desktopPointSize = pointSize;
 }
 
+void TerminalView::setCursorStyle(const QString &style)
+{
+    if (m_cursorStyle == style)
+        return;
+    m_cursorStyle = style;
+    GhosttyTerminalCursorStyle shape = GHOSTTY_TERMINAL_CURSOR_STYLE_BLOCK;
+    if (style == QLatin1String("bar"))
+        shape = GHOSTTY_TERMINAL_CURSOR_STYLE_BAR;
+    else if (style == QLatin1String("underline"))
+        shape = GHOSTTY_TERMINAL_CURSOR_STYLE_UNDERLINE;
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE, &shape);
+    // The default only applies on a reset (CSI 0 q), so reset now.
+    static const char reset[] = "\x1b[0 q";
+    ghostty_terminal_vt_write(m_terminal, reinterpret_cast<const uint8_t *>(reset), sizeof reset - 1);
+    Q_EMIT cursorStyleChanged();
+    update();
+}
+
 void TerminalView::applyFontOverrides()
 {
     QFont font = defaultTerminalFont();
@@ -1047,7 +1065,14 @@ void TerminalView::paint(QPainter *painter)
         ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &cy);
         QColor cursor = colors.cursor_has_value ? qcolor(colors.cursor) : qcolor(colors.foreground);
         const QRectF cell(Padding + cx * m_cellWidth, Padding + cy * m_cellHeight, m_cellWidth, m_cellHeight);
-        if (hasActiveFocus()) {
+        GhosttyRenderStateCursorVisualStyle shape = GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK;
+        ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VISUAL_STYLE, &shape);
+        const qreal thickness = qMax(2.0, std::round(m_cellWidth / 6.0));
+        if (hasActiveFocus() && shape == GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BAR) {
+            painter->fillRect(QRectF(cell.left(), cell.top(), thickness, cell.height()), cursor);
+        } else if (hasActiveFocus() && shape == GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_UNDERLINE) {
+            painter->fillRect(QRectF(cell.left(), cell.bottom() - thickness, cell.width(), thickness), cursor);
+        } else if (hasActiveFocus() && shape == GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK) {
             cursor.setAlphaF(0.5);
             painter->fillRect(cell, cursor);
         } else {

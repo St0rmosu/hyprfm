@@ -10,6 +10,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QPainter>
+#include <QQuickWindow>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 
@@ -355,6 +356,35 @@ private slots:
         QCOMPARE(view.font().family(), QStringLiteral("DejaVu Sans Mono"));
         view.setFontSize(0);
         QCOMPARE(view.font().pointSizeF(), desktop.pointSizeF());
+    }
+
+    // A bar cursor covers the left edge of its cell only; a block, all of it.
+    void testCursorStyle()
+    {
+        QQuickWindow window;
+        window.resize(320, 120);
+        TerminalView view(window.contentItem());
+        view.setSize(QSizeF(320, 120));
+        view.setBackground(Qt::black);
+        view.setForeground(Qt::white);
+        window.show();
+        view.forceActiveFocus();
+        QTRY_VERIFY(view.hasActiveFocus());
+        const QFontMetricsF metrics(view.font());
+        const int cell = qCeil(metrics.horizontalAdvance(QLatin1Char('M')));
+        const auto litAt = [&](int x) {
+            QImage image(320, 120, QImage::Format_RGB32);
+            QPainter painter(&image);
+            view.paint(&painter);
+            painter.end();
+            return qGray(image.pixel(x, 6 + qCeil(metrics.height()) / 2)) > 60;
+        };
+        // Cursor at the top-left cell of an empty screen.
+        QVERIFY(litAt(6 + 1));
+        QVERIFY(litAt(6 + cell - 2));
+        view.setCursorStyle(QStringLiteral("bar"));
+        QVERIFY(litAt(6 + 1));
+        QVERIFY(!litAt(6 + cell - 2));
     }
 
     void testExitEndsTheSession()

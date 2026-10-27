@@ -49,6 +49,7 @@ Item {
         fontFamily: config.terminalFontFamily
         fontSize: config.terminalFontSize
         ligatures: config.terminalLigatures
+        cursorStyle: config.terminalCursorStyle
         windowShortcuts: panel.windowShortcuts
         onFinished: panel.finished()
         onUnsafePaste: (text) => panel.unsafePaste(text)

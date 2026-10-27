@@ -325,6 +325,7 @@ void ConfigManager::setDefaults()
     m_terminalFontFamily.clear();
     m_terminalFontSize = 0;
     m_terminalLigatures = false;
+    m_terminalCursorStyle = QStringLiteral("block");
     m_sortBy = "name";
     m_sortAscending = true;
     m_rememberSortPerFolder = true;
@@ -416,6 +417,11 @@ void ConfigManager::loadConfig()
             m_terminalFontSize = qBound(0.0, double(*v), 72.0);
         if (auto v = config["terminal"]["ligatures"].value<bool>())
             m_terminalLigatures = *v;
+        if (auto v = config["terminal"]["cursor_style"].value<std::string>()) {
+            const QString style = QString::fromStdString(*v).trimmed().toLower();
+            if (style == "block" || style == "bar" || style == "underline")
+                m_terminalCursorStyle = style;
+        }
         if (auto v = config["general"]["dependency_startup_check"].value<bool>())
             m_dependencyStartupCheck = *v;
         if (auto v = config["general"]["sort_by"].value<std::string>())
@@ -707,12 +713,14 @@ dependency_startup_check = true
 
 [terminal]
 # The built-in terminal (F4). Empty font_family: the desktop's monospace
-# font; font_size 0: its size. Ligatures draw "->", "!=", "=>" as one
+# font (GNOME's monospace-font-name); font_size 0: its size. Ligatures draw "->", "!=", "=>" as one
 # symbol in fonts that have them (Fira Code, JetBrains Mono, Maple Mono).
 # Its background follows [appearance] transparency, like the file view.
 font_family = ""
 font_size = 0
 ligatures = false
+# block, bar or underline. Programs can still change it (vim's insert mode).
+cursor_style = "block"
 
 [sidebar]
 # "left" | "right"
@@ -1385,19 +1393,23 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
     }
 
     if (settings.contains("terminalFontFamily") || settings.contains("terminalFontSize")
-        || settings.contains("terminalLigatures")) {
+        || settings.contains("terminalLigatures") || settings.contains("terminalCursorStyle")) {
         if (settings.contains("terminalFontFamily"))
             m_terminalFontFamily = settings.value("terminalFontFamily").toString().trimmed();
         if (settings.contains("terminalFontSize"))
             m_terminalFontSize = qBound(0.0, settings.value("terminalFontSize").toDouble(), 72.0);
         if (settings.contains("terminalLigatures"))
             m_terminalLigatures = settings.value("terminalLigatures").toBool();
+        const QString cursorStyle = settings.value("terminalCursorStyle").toString();
+        if (cursorStyle == "block" || cursorStyle == "bar" || cursorStyle == "underline")
+            m_terminalCursorStyle = cursorStyle;
         toml::table terminal;
         if (auto existing = config["terminal"].as_table())
             terminal = *existing;
         terminal.insert_or_assign("font_family", m_terminalFontFamily.toStdString());
         terminal.insert_or_assign("font_size", m_terminalFontSize);
         terminal.insert_or_assign("ligatures", m_terminalLigatures);
+        terminal.insert_or_assign("cursor_style", m_terminalCursorStyle.toStdString());
         config.insert_or_assign("terminal", std::move(terminal));
     }
 

@@ -86,6 +86,7 @@ Window {
     property string draftTerminalFontFamily: config.terminalFontFamily
     property real draftTerminalFontSize: config.terminalFontSize
     property bool draftTerminalLigatures: config.terminalLigatures
+    property string draftTerminalCursorStyle: config.terminalCursorStyle
     property bool draftDependencyStartupCheck: config.dependencyStartupCheck
     property bool draftSidebarVisible: currentSidebarVisible
     // Must stay in sync with the quick-access entries in Sidebar.qml.
@@ -278,6 +279,7 @@ Window {
         draftTerminalFontFamily = ""
         draftTerminalFontSize = 0
         draftTerminalLigatures = false
+        draftTerminalCursorStyle = "block"
         draftDependencyStartupCheck = true
         draftSidebarVisible = true
         draftHiddenQuickAccess = []
@@ -331,6 +333,7 @@ Window {
             draftTerminalFontFamily = config.terminalFontFamily
             draftTerminalFontSize = config.terminalFontSize
             draftTerminalLigatures = config.terminalLigatures
+            draftTerminalCursorStyle = config.terminalCursorStyle
             draftDependencyStartupCheck = config.dependencyStartupCheck
             draftSidebarVisible = currentSidebarVisible
             draftHiddenQuickAccess = config.hiddenQuickAccess
@@ -410,6 +413,7 @@ Window {
             terminalFontFamily: draftTerminalFontFamily,
             terminalFontSize: draftTerminalFontSize,
             terminalLigatures: draftTerminalLigatures,
+            terminalCursorStyle: draftTerminalCursorStyle,
             dependencyStartupCheck: draftDependencyStartupCheck,
             sidebarVisible: draftSidebarVisible,
             hiddenQuickAccess: draftHiddenQuickAccess,
@@ -789,6 +793,18 @@ Window {
                 checked: root.draftTerminalLigatures
                 onToggled: (value) => {
                     root.draftTerminalLigatures = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Dropdown {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                label: "Terminal cursor"
+                model: ["Block", "Bar", "Underline"]
+                currentIndex: Math.max(0, ["block", "bar", "underline"].indexOf(root.draftTerminalCursorStyle))
+                onSelected: (index, _) => {
+                    root.draftTerminalCursorStyle = ["block", "bar", "underline"][index]
                     root.applySettingsNow()
                 }
             }

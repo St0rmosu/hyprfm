@@ -365,11 +365,14 @@ private slots:
         QCOMPARE(mgr.terminalFontSize(), 0.0);
         QCOMPARE(mgr.terminalLigatures(), false);
         mgr.saveSettings({{"terminalFontFamily", "Maple Mono"}, {"terminalLigatures", true}});
-        mgr.saveSettings({{"terminalFontSize", 13}});
+        mgr.saveSettings({{"terminalFontSize", 13}, {"terminalCursorStyle", "bar"}});
         ConfigManager mgr2(path);
         QCOMPARE(mgr2.terminalFontFamily(), QStringLiteral("Maple Mono"));
         QCOMPARE(mgr2.terminalFontSize(), 13.0);
         QCOMPARE(mgr2.terminalLigatures(), true);
+        QCOMPARE(mgr2.terminalCursorStyle(), QStringLiteral("bar"));
+        mgr2.saveSettings({{"terminalCursorStyle", "triangle"}});   // ignored
+        QCOMPARE(mgr2.terminalCursorStyle(), QStringLiteral("bar"));
     }
 
     void testBookmarkNamesRoundTrip()

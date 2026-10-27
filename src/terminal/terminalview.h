@@ -33,6 +33,9 @@ class TerminalView : public QQuickPaintedItem
     Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontChanged)
     Q_PROPERTY(qreal fontSize READ fontSize WRITE setFontSize NOTIFY fontChanged)
     Q_PROPERTY(bool ligatures READ ligatures WRITE setLigatures NOTIFY fontChanged)
+    // "block", "bar" or "underline": the shape programs return to when they
+    // reset theirs (vim's insert mode sets its own).
+    Q_PROPERTY(QString cursorStyle READ cursorStyle WRITE setCursorStyle NOTIFY cursorStyleChanged)
     Q_PROPERTY(QColor foreground READ foreground WRITE setForeground NOTIFY colorsChanged)
     Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY colorsChanged)
     // Shortcuts the window keeps while the terminal has focus (the panel
@@ -56,6 +59,8 @@ public:
     void setFontSize(qreal size);
     bool ligatures() const { return m_ligatures; }
     void setLigatures(bool on);
+    QString cursorStyle() const { return m_cursorStyle; }
+    void setCursorStyle(const QString &style);
     // The desktop's monospace font (the portal's monospace-font-name), the
     // default before any fontFamily/fontSize override.
     static void setDesktopFont(const QString &family, qreal pointSize);
@@ -89,6 +94,7 @@ signals:
     void titleChanged();
     void runningChanged();
     void fontChanged();
+    void cursorStyleChanged();
     void colorsChanged();
     void finished();
     void unsafePaste(const QString &text);
@@ -152,6 +158,7 @@ private:
     QString m_fontFamily;
     qreal m_fontSize = 0;
     bool m_ligatures = false;
+    QString m_cursorStyle = QStringLiteral("block");
     // Regular, bold, italic, bold italic: m_font fitted to the cell grid.
     QFont m_cellFonts[4];
     QColor m_foreground = QColor(0xcd, 0xd6, 0xf4);
