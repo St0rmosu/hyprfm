@@ -50,6 +50,7 @@ Item {
         fontSize: config.terminalFontSize
         ligatures: config.terminalLigatures
         cursorStyle: config.terminalCursorStyle
+        cursorBlink: config.terminalCursorBlink
         windowShortcuts: panel.windowShortcuts
         onFinished: panel.finished()
         onUnsafePaste: (text) => panel.unsafePaste(text)

@@ -148,6 +148,10 @@ TerminalView::TerminalView(QQuickItem *parent)
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton);
     setActiveFocusOnTab(true);
     updateCellSize();
+    connect(&m_blinkTimer, &QTimer::timeout, this, [this] {
+        m_cursorShown = !m_cursorShown;
+        update();
+    });
 
     ghostty_terminal_new(nullptr, &m_terminal, m_cols, m_rowCount);
     ghostty_render_state_new(nullptr, &m_renderState);
@@ -251,16 +255,46 @@ void TerminalView::setCursorStyle(const QString &style)
     if (m_cursorStyle == style)
         return;
     m_cursorStyle = style;
+    applyCursorDefaults();
+}
+
+void TerminalView::setCursorBlink(bool on)
+{
+    if (m_cursorBlink == on)
+        return;
+    m_cursorBlink = on;
+    applyCursorDefaults();
+    updateBlinkTimer();
+}
+
+void TerminalView::applyCursorDefaults()
+{
     GhosttyTerminalCursorStyle shape = GHOSTTY_TERMINAL_CURSOR_STYLE_BLOCK;
-    if (style == QLatin1String("bar"))
+    if (m_cursorStyle == QLatin1String("bar"))
         shape = GHOSTTY_TERMINAL_CURSOR_STYLE_BAR;
-    else if (style == QLatin1String("underline"))
+    else if (m_cursorStyle == QLatin1String("underline"))
         shape = GHOSTTY_TERMINAL_CURSOR_STYLE_UNDERLINE;
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE, &shape);
-    // The default only applies on a reset (CSI 0 q), so reset now.
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK, &m_cursorBlink);
+    // The defaults only apply on a reset (CSI 0 q), so reset now.
     static const char reset[] = "\x1b[0 q";
     ghostty_terminal_vt_write(m_terminal, reinterpret_cast<const uint8_t *>(reset), sizeof reset - 1);
     Q_EMIT cursorStyleChanged();
+    update();
+}
+
+// paint() runs on the render thread, so it cannot start a timer; this runs
+// on focus and setting changes instead. A program that turns blinking on
+// while the setting is off (CSI 1 q) gets a steady cursor: the timer is not
+// running to drive it.
+void TerminalView::updateBlinkTimer()
+{
+    const int flashTime = QGuiApplication::styleHints()->cursorFlashTime();
+    m_cursorShown = true;
+    if (m_cursorBlink && hasActiveFocus() && flashTime > 0)
+        m_blinkTimer.start(flashTime / 2);
+    else
+        m_blinkTimer.stop();
     update();
 }
 
@@ -551,7 +585,7 @@ bool TerminalView::event(QEvent *event)
         return true;
     }
     if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)
-        update();   // the cursor is drawn filled only while focused
+        updateBlinkTimer();   // also repaints: the cursor is filled only while focused
     return QQuickPaintedItem::event(event);
 }
 
@@ -598,6 +632,11 @@ void TerminalView::sendKey(QKeyEvent *event, GhosttyKeyAction action)
 
 void TerminalView::keyPressEvent(QKeyEvent *event)
 {
+    // Typing shows the cursor and holds off the next blink.
+    if (m_blinkTimer.isActive()) {
+        m_cursorShown = true;
+        m_blinkTimer.start();
+    }
     if (m_ptyFd < 0) {
         event->ignore();
         return;
@@ -1059,6 +1098,10 @@ void TerminalView::paint(QPainter *painter)
     bool cursorInView = false;
     ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE, &cursorVisible);
     ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE, &cursorInView);
+    bool cursorBlinking = false;
+    ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING, &cursorBlinking);
+    if (cursorBlinking && !m_cursorShown && hasActiveFocus())
+        cursorVisible = false;
     if (cursorVisible && cursorInView) {
         uint16_t cx = 0, cy = 0;
         ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X, &cx);

@@ -4,6 +4,7 @@
 #include <QFont>
 #include <QQuickPaintedItem>
 #include <QStringList>
+#include <QTimer>
 
 // Ghostty names a struct field `emit`, which Qt defines away as a macro.
 #pragma push_macro("emit")
@@ -36,6 +37,7 @@ class TerminalView : public QQuickPaintedItem
     // "block", "bar" or "underline": the shape programs return to when they
     // reset theirs (vim's insert mode sets its own).
     Q_PROPERTY(QString cursorStyle READ cursorStyle WRITE setCursorStyle NOTIFY cursorStyleChanged)
+    Q_PROPERTY(bool cursorBlink READ cursorBlink WRITE setCursorBlink NOTIFY cursorStyleChanged)
     Q_PROPERTY(QColor foreground READ foreground WRITE setForeground NOTIFY colorsChanged)
     Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY colorsChanged)
     // Shortcuts the window keeps while the terminal has focus (the panel
@@ -61,6 +63,8 @@ public:
     void setLigatures(bool on);
     QString cursorStyle() const { return m_cursorStyle; }
     void setCursorStyle(const QString &style);
+    bool cursorBlink() const { return m_cursorBlink; }
+    void setCursorBlink(bool on);
     // The desktop's monospace font (the portal's monospace-font-name), the
     // default before any fontFamily/fontSize override.
     static void setDesktopFont(const QString &family, qreal pointSize);
@@ -117,6 +121,8 @@ private:
     void writePty(const char *data, qsizetype len);
     void stop();
     void sendKey(QKeyEvent *event, GhosttyKeyAction action);
+    void applyCursorDefaults();
+    void updateBlinkTimer();
     void applyFontOverrides();
     void updateCellSize();
     void resizeGrid();
@@ -159,6 +165,11 @@ private:
     qreal m_fontSize = 0;
     bool m_ligatures = false;
     QString m_cursorStyle = QStringLiteral("block");
+    bool m_cursorBlink = false;
+    // Blink phase: the cursor is drawn while true. Flipped by m_blinkTimer,
+    // which runs only while focused with blinking on.
+    bool m_cursorShown = true;
+    QTimer m_blinkTimer;
     // Regular, bold, italic, bold italic: m_font fitted to the cell grid.
     QFont m_cellFonts[4];
     QColor m_foreground = QColor(0xcd, 0xd6, 0xf4);

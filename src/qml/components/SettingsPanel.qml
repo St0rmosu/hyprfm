@@ -87,6 +87,7 @@ Window {
     property real draftTerminalFontSize: config.terminalFontSize
     property bool draftTerminalLigatures: config.terminalLigatures
     property string draftTerminalCursorStyle: config.terminalCursorStyle
+    property bool draftTerminalCursorBlink: config.terminalCursorBlink
     property bool draftDependencyStartupCheck: config.dependencyStartupCheck
     property bool draftSidebarVisible: currentSidebarVisible
     // Must stay in sync with the quick-access entries in Sidebar.qml.
@@ -280,6 +281,7 @@ Window {
         draftTerminalFontSize = 0
         draftTerminalLigatures = false
         draftTerminalCursorStyle = "block"
+        draftTerminalCursorBlink = true
         draftDependencyStartupCheck = true
         draftSidebarVisible = true
         draftHiddenQuickAccess = []
@@ -334,6 +336,7 @@ Window {
             draftTerminalFontSize = config.terminalFontSize
             draftTerminalLigatures = config.terminalLigatures
             draftTerminalCursorStyle = config.terminalCursorStyle
+            draftTerminalCursorBlink = config.terminalCursorBlink
             draftDependencyStartupCheck = config.dependencyStartupCheck
             draftSidebarVisible = currentSidebarVisible
             draftHiddenQuickAccess = config.hiddenQuickAccess
@@ -414,6 +417,7 @@ Window {
             terminalFontSize: draftTerminalFontSize,
             terminalLigatures: draftTerminalLigatures,
             terminalCursorStyle: draftTerminalCursorStyle,
+            terminalCursorBlink: draftTerminalCursorBlink,
             dependencyStartupCheck: draftDependencyStartupCheck,
             sidebarVisible: draftSidebarVisible,
             hiddenQuickAccess: draftHiddenQuickAccess,
@@ -805,6 +809,17 @@ Window {
                 currentIndex: Math.max(0, ["block", "bar", "underline"].indexOf(root.draftTerminalCursorStyle))
                 onSelected: (index, _) => {
                     root.draftTerminalCursorStyle = ["block", "bar", "underline"][index]
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Toggle {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                label: "Blinking terminal cursor"
+                checked: root.draftTerminalCursorBlink
+                onToggled: (value) => {
+                    root.draftTerminalCursorBlink = value
                     root.applySettingsNow()
                 }
             }

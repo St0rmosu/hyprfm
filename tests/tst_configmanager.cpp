@@ -371,6 +371,9 @@ private slots:
         QCOMPARE(mgr2.terminalFontSize(), 13.0);
         QCOMPARE(mgr2.terminalLigatures(), true);
         QCOMPARE(mgr2.terminalCursorStyle(), QStringLiteral("bar"));
+        QCOMPARE(mgr2.terminalCursorBlink(), true);
+        mgr2.saveSettings({{"terminalCursorBlink", false}});
+        QCOMPARE(ConfigManager(path).terminalCursorBlink(), false);
         mgr2.saveSettings({{"terminalCursorStyle", "triangle"}});   // ignored
         QCOMPARE(mgr2.terminalCursorStyle(), QStringLiteral("bar"));
     }

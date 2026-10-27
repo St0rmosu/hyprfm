@@ -12,6 +12,7 @@
 #include <QPainter>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QStyleHints>
 #include <QTemporaryDir>
 
 #include "terminal/terminalview.h"
@@ -385,6 +386,17 @@ private slots:
         view.setCursorStyle(QStringLiteral("bar"));
         QVERIFY(litAt(6 + 1));
         QVERIFY(!litAt(6 + cell - 2));
+
+        // Blinking: the cursor comes and goes while focused.
+        view.setCursorBlink(true);
+        QVERIFY(litAt(6 + 1));
+        QTRY_VERIFY(!litAt(6 + 1));
+        QTRY_VERIFY(litAt(6 + 1));
+        // Off again: steady, whatever phase it stopped in.
+        view.setCursorBlink(false);
+        QVERIFY(litAt(6 + 1));
+        QTest::qWait(QGuiApplication::styleHints()->cursorFlashTime());
+        QVERIFY(litAt(6 + 1));
     }
 
     void testExitEndsTheSession()

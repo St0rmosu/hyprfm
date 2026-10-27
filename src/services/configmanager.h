@@ -30,6 +30,7 @@ class ConfigManager : public QObject
     Q_PROPERTY(double terminalFontSize READ terminalFontSize NOTIFY configChanged)
     Q_PROPERTY(bool terminalLigatures READ terminalLigatures NOTIFY configChanged)
     Q_PROPERTY(QString terminalCursorStyle READ terminalCursorStyle NOTIFY configChanged)
+    Q_PROPERTY(bool terminalCursorBlink READ terminalCursorBlink NOTIFY configChanged)
     Q_PROPERTY(bool dependencyStartupCheck READ dependencyStartupCheck NOTIFY configChanged)
     Q_PROPERTY(QString sortBy READ sortBy NOTIFY configChanged)
     Q_PROPERTY(bool sortAscending READ sortAscending NOTIFY configChanged)
@@ -100,6 +101,7 @@ public:
     double terminalFontSize() const { return m_terminalFontSize; }
     bool terminalLigatures() const { return m_terminalLigatures; }
     QString terminalCursorStyle() const { return m_terminalCursorStyle; }
+    bool terminalCursorBlink() const { return m_terminalCursorBlink; }
     bool dependencyStartupCheck() const;
     QString sortBy() const;
     bool sortAscending() const;
@@ -214,6 +216,7 @@ private:
     double m_terminalFontSize = 0;
     bool m_terminalLigatures = false;
     QString m_terminalCursorStyle = QStringLiteral("block");
+    bool m_terminalCursorBlink = true;
     bool m_dependencyStartupCheck;
     QString m_sortBy;
     bool m_sortAscending;

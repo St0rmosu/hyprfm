@@ -326,6 +326,7 @@ void ConfigManager::setDefaults()
     m_terminalFontSize = 0;
     m_terminalLigatures = false;
     m_terminalCursorStyle = QStringLiteral("block");
+    m_terminalCursorBlink = true;
     m_sortBy = "name";
     m_sortAscending = true;
     m_rememberSortPerFolder = true;
@@ -417,6 +418,8 @@ void ConfigManager::loadConfig()
             m_terminalFontSize = qBound(0.0, double(*v), 72.0);
         if (auto v = config["terminal"]["ligatures"].value<bool>())
             m_terminalLigatures = *v;
+        if (auto v = config["terminal"]["cursor_blink"].value<bool>())
+            m_terminalCursorBlink = *v;
         if (auto v = config["terminal"]["cursor_style"].value<std::string>()) {
             const QString style = QString::fromStdString(*v).trimmed().toLower();
             if (style == "block" || style == "bar" || style == "underline")
@@ -721,6 +724,7 @@ font_size = 0
 ligatures = false
 # block, bar or underline. Programs can still change it (vim's insert mode).
 cursor_style = "block"
+cursor_blink = true
 
 [sidebar]
 # "left" | "right"
@@ -1393,13 +1397,16 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
     }
 
     if (settings.contains("terminalFontFamily") || settings.contains("terminalFontSize")
-        || settings.contains("terminalLigatures") || settings.contains("terminalCursorStyle")) {
+        || settings.contains("terminalLigatures") || settings.contains("terminalCursorStyle")
+        || settings.contains("terminalCursorBlink")) {
         if (settings.contains("terminalFontFamily"))
             m_terminalFontFamily = settings.value("terminalFontFamily").toString().trimmed();
         if (settings.contains("terminalFontSize"))
             m_terminalFontSize = qBound(0.0, settings.value("terminalFontSize").toDouble(), 72.0);
         if (settings.contains("terminalLigatures"))
             m_terminalLigatures = settings.value("terminalLigatures").toBool();
+        if (settings.contains("terminalCursorBlink"))
+            m_terminalCursorBlink = settings.value("terminalCursorBlink").toBool();
         const QString cursorStyle = settings.value("terminalCursorStyle").toString();
         if (cursorStyle == "block" || cursorStyle == "bar" || cursorStyle == "underline")
             m_terminalCursorStyle = cursorStyle;
@@ -1410,6 +1417,7 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
         terminal.insert_or_assign("font_size", m_terminalFontSize);
         terminal.insert_or_assign("ligatures", m_terminalLigatures);
         terminal.insert_or_assign("cursor_style", m_terminalCursorStyle.toStdString());
+        terminal.insert_or_assign("cursor_blink", m_terminalCursorBlink);
         config.insert_or_assign("terminal", std::move(terminal));
     }
 
