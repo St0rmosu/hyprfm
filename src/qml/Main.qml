@@ -336,6 +336,22 @@ ApplicationWindow {
         return tabModel.activeTab ? tabModel.activeTab.splitViewEnabled : false
     }
 
+    readonly property bool activeSplitUnsaved: {
+        var tab = tabModel.activeTab
+        var count = bookmarks.count
+        if (!tab || !tab.splitViewEnabled)
+            return false
+        var orientation = root.isSplitHorizontal ? "horizontal" : "vertical"
+        for (var i = 0; i < count; ++i) {
+            var split = bookmarks.splitAt(i)
+            if (split.primaryPath === tab.currentPath &&
+                    split.secondaryPath === tab.secondaryCurrentPath &&
+                    split.orientation === orientation)
+                return false
+        }
+        return true
+    }
+
     readonly property bool isSplitHorizontal: {
         var orient = (tabModel.activeTab && tabModel.activeTab.splitOrientation)
             ? tabModel.activeTab.splitOrientation
@@ -348,6 +364,19 @@ ApplicationWindow {
         // From the effective orientation: a tab with none set follows the
         // config default, which may already be horizontal.
         tabModel.activeTab.splitOrientation = root.isSplitHorizontal ? "vertical" : "horizontal"
+    }
+
+    function toggleSplitInOrientation(orientation) {
+        if (!tabModel.activeTab)
+            return
+        if (tabModel.activeTab.splitViewEnabled &&
+                (root.isSplitHorizontal ? "horizontal" : "vertical") === orientation) {
+            root.toggleSplitView()
+            return
+        }
+        tabModel.activeTab.splitOrientation = orientation
+        if (!tabModel.activeTab.splitViewEnabled)
+            root.toggleSplitView()
     }
 
     function paneBaseModel(pane) {
@@ -995,7 +1024,7 @@ ApplicationWindow {
     }
 
     function saveSplitPaths(primaryPath, secondaryPath, orientation) {
-        if (!primaryPath || !secondaryPath || primaryPath === secondaryPath)
+        if (!primaryPath || !secondaryPath)
             return
         var countBefore = bookmarks.count
         bookmarks.addSplitBookmark(primaryPath, secondaryPath,
@@ -4073,6 +4102,10 @@ ApplicationWindow {
                     height: parent.height
                     tooltipLayer: sidebarTooltipLayer
                     currentPath: panePath(activePane)
+                    activeSplitVisible: root.activeSplitUnsaved
+                    activeSplitPrimaryPath: tabModel.activeTab ? tabModel.activeTab.currentPath : ""
+                    activeSplitSecondaryPath: tabModel.activeTab ? tabModel.activeTab.secondaryCurrentPath : ""
+                    activeSplitHorizontal: root.isSplitHorizontal
                     trashPath: root.unifiedTrashPath
                     isRecentsView: root.isRecentsView
                     onBookmarkClicked: (path) => {
@@ -4080,6 +4113,12 @@ ApplicationWindow {
                     }
                     onSavedSplitClicked: (split) => {
                         root.restoreSavedSplit(split)
+                    }
+                    onSaveActiveSplitRequested: (index) => {
+                        var countBefore = bookmarks.count
+                        root.saveCurrentSplit()
+                        if (bookmarks.count > countBefore && index >= 0)
+                            bookmarks.moveBookmark(bookmarks.count - 1, index)
                     }
                     onRenamingBookmarkIndexChanged: {
                         if (renamingBookmarkIndex < 0)
@@ -4213,8 +4252,7 @@ ApplicationWindow {
                         fileOps.restoreFromTrash(paths)
                 }
                 onEmptyTrashRequested: root.openDialog(emptyTrashConfirmDialogLoader)
-                onSplitViewToggled: root.toggleSplitView()
-                onSplitOrientationToggled: root.toggleSplitOrientation()
+                onSplitRequested: (orientation) => root.toggleSplitInOrientation(orientation)
                 onHomeClicked: {
                     root.navigateActivePaneTo(fsModel.homePath())
                 }

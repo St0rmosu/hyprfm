@@ -12,9 +12,14 @@ Rectangle {
     property string currentPath: ""
     property string trashPath: fsModel.homePath() + "/.local/share/Trash/files"
     property bool isRecentsView: false
+    property bool activeSplitVisible: false
+    property string activeSplitPrimaryPath: ""
+    property string activeSplitSecondaryPath: ""
+    property bool activeSplitHorizontal: false
     property Item tooltipLayer: null
     signal bookmarkClicked(string path)
     signal savedSplitClicked(var split)
+    signal saveActiveSplitRequested(int index)
 
     // Index of the bookmark being renamed inline, -1 when none.
     property int renamingBookmarkIndex: -1
@@ -231,11 +236,115 @@ Rectangle {
             color: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.08)
         }
 
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.activeSplitVisible ? 48 : 0
+            visible: root.activeSplitVisible
+
+            Rectangle {
+                id: activeSplitRow
+                objectName: "activeSplitRow"
+                width: parent.width - Theme.spacing
+                height: 44
+                x: (parent.width - width) / 2
+                y: 2
+                radius: Theme.radiusSmall
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.13)
+                Drag.active: splitDragArea.drag.active
+                Drag.source: activeSplitRow
+                Drag.keys: ["hyprfm-active-split"]
+                Drag.hotSpot.x: splitDragArea.mouseX
+                Drag.hotSpot.y: splitDragArea.mouseY
+                Accessible.role: Accessible.ListItem
+                Accessible.name: "Active split, drag to bookmarks or save"
+
+                MouseArea {
+                    id: splitDragArea
+                    anchors.fill: parent
+                    cursorShape: Qt.OpenHandCursor
+                    drag.target: activeSplitRow
+                    drag.threshold: 6
+                    onReleased: {
+                        if (drag.active)
+                            activeSplitRow.Drag.drop()
+                        Qt.callLater(activeSplitRow.restorePosition)
+                    }
+                    onCanceled: Qt.callLater(activeSplitRow.restorePosition)
+                }
+
+                function restorePosition() {
+                    x = Qt.binding(() => (parent.width - width) / 2)
+                    y = 2
+                }
+
+                IconSquareSplitHorizontal {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.spacing
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: 18
+                    rotation: root.activeSplitHorizontal ? 90 : 0
+                    color: Theme.accent
+                }
+
+                Column {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.spacing + 18 + Theme.spacing
+                    anchors.right: saveSplitButton.left
+                    anchors.rightMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 1
+
+                    Text {
+                        text: "Active split"
+                        color: Theme.accent
+                        font.pointSize: Theme.fontSmall
+                        font.weight: Font.Medium
+                    }
+                    Text {
+                        width: parent.width
+                        textFormat: Text.PlainText
+                        text: bookmarksSection.displayName(root.activeSplitPrimaryPath)
+                              + " + " + bookmarksSection.displayName(root.activeSplitSecondaryPath)
+                        color: Theme.subtext
+                        font.pointSize: Theme.fontSmall
+                        elide: Text.ElideRight
+                    }
+                }
+
+                HoverRect {
+                    id: saveSplitButton
+                    objectName: "saveActiveSplitButton"
+                    anchors.right: parent.right
+                    anchors.rightMargin: 4
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 30; height: 30
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Save active split to bookmarks"
+                    onClicked: root.saveActiveSplitRequested(-1)
+                    IconBookmark { anchors.centerIn: parent; size: 16; color: Theme.accent }
+                }
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 25
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.spacing + 3
+                anchors.verticalCenter: parent.verticalCenter
+                text: "FAVOURITES"
+                color: Theme.muted
+                font.pointSize: Theme.fontSmall
+                font.weight: Font.DemiBold
+            }
+        }
+
         // Bookmarks section — drag folders to add, drag items to reorder
         Item {
             id: bookmarksSection
             Layout.fillWidth: true
-            implicitHeight: bookmarksList.height
+            implicitHeight: Math.max(bookmarksList.height, root.activeSplitVisible ? rowHeight : 0)
 
             readonly property int rowHeight: 32
             readonly property bool externalDragActive:
@@ -315,6 +424,29 @@ Rectangle {
                     drop.accept()
                 }
                 property int _extDropIndex: -1
+            }
+
+            DropArea {
+                id: activeSplitDropArea
+                anchors.fill: parent
+                z: 150
+                keys: ["hyprfm-active-split"]
+                onDropped: (drop) => {
+                    var index = Math.max(0, Math.min(
+                        Math.round(drop.y / bookmarksSection.rowHeight), bookmarks.count))
+                    root.saveActiveSplitRequested(index)
+                    drop.accept()
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                z: 149
+                visible: activeSplitDropArea.containsDrag
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
+                border.color: Theme.accent
+                border.width: 1
+                radius: Theme.radiusSmall
             }
 
             ListView {
@@ -439,6 +571,15 @@ Rectangle {
                         }
                     }
                 }
+            }
+
+            Text {
+                objectName: "emptyBookmarksHint"
+                visible: bookmarks.count === 0 && root.activeSplitVisible
+                anchors.centerIn: parent
+                text: "Drop here to save"
+                color: Theme.muted
+                font.pointSize: Theme.fontSmall
             }
 
             Rectangle {

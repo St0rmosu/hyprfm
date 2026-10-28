@@ -1455,6 +1455,109 @@ private slots:
         QTRY_VERIFY(grid->property("current").toBool());
     }
 
+    void testToolbarSplitButtonsSelectTheirOrientation()
+    {
+        App app;
+        QVERIFY(app.load());
+        auto *tab = app.tabModel->activeTab();
+        QVERIFY(tab);
+        auto *vertical = app.item("verticalSplitButton");
+        auto *horizontal = app.item("horizontalSplitButton");
+        QVERIFY(vertical && horizontal);
+        auto *grid = app.item("viewModeButton_grid");
+        QVERIFY(grid);
+        QCOMPARE(vertical->parentItem(), horizontal->parentItem());
+        QVERIFY(vertical->parentItem() != grid->parentItem());
+
+        QTest::mouseClick(app.window, Qt::LeftButton, {}, app.center(vertical));
+        QTRY_VERIFY(tab->splitViewEnabled());
+        QCOMPARE(tab->splitOrientation(), QStringLiteral("vertical"));
+        QVERIFY(vertical->property("current").toBool());
+
+        QTest::mouseClick(app.window, Qt::LeftButton, {}, app.center(horizontal));
+        QTRY_COMPARE(tab->splitOrientation(), QStringLiteral("horizontal"));
+        QVERIFY(tab->splitViewEnabled());
+        QVERIFY(horizontal->property("current").toBool());
+
+        QTest::mouseClick(app.window, Qt::LeftButton, {}, app.center(horizontal));
+        QTRY_VERIFY(!tab->splitViewEnabled());
+    }
+
+    void testActiveSplitAppearsInSidebarUntilSaved()
+    {
+        App app;
+        QVERIFY(app.load());
+        auto *tab = app.tabModel->activeTab();
+        QVERIFY(tab);
+        auto *sidebar = app.item("sidebarPanel");
+        auto *activeSplit = app.item("activeSplitRow");
+        auto *save = app.item("saveActiveSplitButton");
+        auto *emptyHint = app.item("emptyBookmarksHint");
+        QVERIFY(sidebar && activeSplit && save && emptyHint);
+        QVERIFY(!sidebar->property("activeSplitVisible").toBool());
+
+        QVERIFY(QMetaObject::invokeMethod(app.window, "toggleSplitView"));
+        QTRY_VERIFY(sidebar->property("activeSplitVisible").toBool());
+        QVERIFY(emptyHint->isVisible());
+        app.window->grabWindow();
+        QTRY_VERIFY(app.center(save).x() > 0);
+        QTest::mouseClick(app.window, Qt::LeftButton, {}, app.center(save));
+        QTRY_COMPARE(app.bookmarks->rowCount(), 1);
+        QVERIFY(tab->splitViewEnabled());
+        QTRY_VERIFY(!sidebar->property("activeSplitVisible").toBool());
+        const auto split = app.bookmarks->splitAt(0);
+        QCOMPARE(split.value("primaryPath").toString(), tab->currentPath());
+        QCOMPARE(split.value("secondaryPath").toString(), tab->secondaryCurrentPath());
+    }
+
+    void testDragActiveSplitIntoEmptyBookmarks()
+    {
+        App app;
+        QVERIFY(app.load());
+        QVERIFY(QMetaObject::invokeMethod(app.window, "toggleSplitView"));
+        auto *activeSplit = app.item("activeSplitRow");
+        auto *emptyHint = app.item("emptyBookmarksHint");
+        QVERIFY(activeSplit && emptyHint);
+        QTRY_VERIFY(emptyHint->isVisible());
+        app.window->grabWindow();
+        QTRY_VERIFY(app.center(activeSplit).x() > 0);
+
+        const QPoint start = app.center(activeSplit);
+        const QPoint finish = app.center(emptyHint);
+        QTest::mousePress(app.window, Qt::LeftButton, {}, start);
+        QTest::mouseMove(app.window, start + QPoint(0, 12));
+        QTest::mouseMove(app.window, finish);
+        QTest::mouseRelease(app.window, Qt::LeftButton, {}, finish);
+        QTRY_COMPARE(app.bookmarks->rowCount(), 1);
+    }
+
+    void testDragActiveSplitAmongExistingBookmarks()
+    {
+        App app;
+        QVERIFY(app.load());
+        const QString folder = app.home.path() + "/favorite";
+        QVERIFY(QDir().mkpath(folder));
+        app.bookmarks->addBookmark(folder);
+        QCOMPARE(app.bookmarks->rowCount(), 1);
+        QVERIFY(QMetaObject::invokeMethod(app.window, "toggleSplitView"));
+        auto *activeSplit = app.item("activeSplitRow");
+        QQuickItem *firstBookmark = nullptr;
+        QTRY_VERIFY(firstBookmark = app.item("bookmark_0"));
+        QVERIFY(activeSplit);
+        app.window->grabWindow();
+
+        const QPoint start = app.center(activeSplit);
+        const QPoint finish = firstBookmark->mapToScene(
+            QPointF(firstBookmark->width() / 2, 4)).toPoint();
+        QTest::mousePress(app.window, Qt::LeftButton, {}, start);
+        QTest::mouseMove(app.window, start + QPoint(0, 12));
+        QTest::mouseMove(app.window, finish);
+        QTest::mouseRelease(app.window, Qt::LeftButton, {}, finish);
+        QTRY_COMPARE(app.bookmarks->rowCount(), 2);
+        QCOMPARE(app.bookmarks->splitAt(0).value("primaryPath").toString(),
+                 app.tabModel->activeTab()->currentPath());
+    }
+
     // The status bar reports free space as a Dolphin-style meter: the bar
     // fills with what is used and the label sits on it. The fill has to track
     // the ratio and step through accent/warning/error at 75% and 90%, since a
