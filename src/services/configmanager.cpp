@@ -365,23 +365,18 @@ void ConfigManager::watchIconTheme()
         m_iconRefreshTimer.stop();
         return;
     }
-    QString themeName = m_iconTheme.isEmpty() ? m_iconThemeFallback : m_iconTheme;
-    QString baseDir = QDir::homePath() + QStringLiteral("/.local/share/icons/") + themeName;
-    QString iconDir = baseDir + QStringLiteral("/scalable/places");
-    QString indexFile = baseDir + QStringLiteral("/index.theme");
-    QString folderFile = iconDir + QStringLiteral("/folder.svg");
-
-    if (QDir(iconDir).exists()) {
-        if (!m_iconWatcher.directories().contains(iconDir))
-            m_iconWatcher.addPath(iconDir);
-    }
-    if (QFile::exists(indexFile)) {
-        if (!m_iconWatcher.files().contains(indexFile))
-            m_iconWatcher.addPath(indexFile);
-    }
-    if (QFile::exists(folderFile)) {
-        if (!m_iconWatcher.files().contains(folderFile))
-            m_iconWatcher.addPath(folderFile);
+    const QString themeName = m_iconTheme.isEmpty() ? m_iconThemeFallback : m_iconTheme;
+    // The user-writable folders IconProvider searches; system themes in
+    // /usr/share only change on a package update.
+    for (const QString &root : {QDir::homePath() + QStringLiteral("/.icons/"),
+                                QDir::homePath() + QStringLiteral("/.local/share/icons/")}) {
+        const QString baseDir = root + themeName;
+        const QString iconDir = baseDir + QStringLiteral("/scalable/places");
+        for (const QString &path : {iconDir, baseDir + QStringLiteral("/index.theme"),
+                                    iconDir + QStringLiteral("/folder.svg")}) {
+            if (QFileInfo::exists(path))
+                m_iconWatcher.addPath(path);
+        }
     }
 }
 
