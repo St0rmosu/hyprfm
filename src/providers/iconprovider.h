@@ -32,12 +32,12 @@ public:
         m_cache.clear();
     }
 
-    void setPrimaryTheme(const QString &primaryTheme, bool force = false)
+    void setPrimaryTheme(const QString &primaryTheme)
     {
         const QString themeName = primaryTheme.trimmed().isEmpty() ? QStringLiteral("Adwaita")
                                                                     : primaryTheme.trimmed();
         QMutexLocker locker(&m_cacheMutex);
-        if (!force && m_primaryTheme == themeName && !m_primaryDirs.isEmpty())
+        if (m_primaryTheme == themeName && !m_primaryDirs.isEmpty())
             return;
 
         m_primaryTheme = themeName;
