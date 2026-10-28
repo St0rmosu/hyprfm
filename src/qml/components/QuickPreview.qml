@@ -815,7 +815,7 @@ Item {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: 64
                                 height: 64
-                                source: "image://icon/" + (root.fileProps.iconName || (root.isPdf ? "application-pdf" : "image-x-generic")) + "?theme=" + config.iconTheme
+                                source: "image://icon/" + (root.fileProps.iconName || (root.isPdf ? "application-pdf" : "image-x-generic")) + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                                 sourceSize: Qt.size(width, height)
                                 fillMode: Image.PreserveAspectFit
                             }
@@ -1036,7 +1036,7 @@ Item {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: 96
                                 height: 96
-                                source: "image://icon/" + (root.fileProps.iconName || "application-pdf") + "?theme=" + config.iconTheme
+                                source: "image://icon/" + (root.fileProps.iconName || "application-pdf") + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                                 sourceSize: Qt.size(width, height)
                                 fillMode: Image.PreserveAspectFit
                             }
@@ -1177,7 +1177,7 @@ Item {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: 96
                                 height: 96
-                                source: "image://icon/" + (root.fileProps.iconName || "text-x-generic") + "?theme=" + config.iconTheme
+                                source: "image://icon/" + (root.fileProps.iconName || "text-x-generic") + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                                 sourceSize: Qt.size(width, height)
                                 fillMode: Image.PreserveAspectFit
                             }
@@ -1240,7 +1240,7 @@ Item {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: 72
                                 height: 72
-                                source: "image://icon/" + (root.fileProps.iconName || "text-x-generic") + "?theme=" + config.iconTheme
+                                source: "image://icon/" + (root.fileProps.iconName || "text-x-generic") + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                                 sourceSize: Qt.size(width, height)
                                 fillMode: Image.PreserveAspectFit
                             }

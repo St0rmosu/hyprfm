@@ -991,6 +991,10 @@ int main(int argc, char *argv[])
         iconProvider->setPrimaryTheme(config->iconTheme());
     });
 
+    QObject::connect(config, &ConfigManager::iconRevisionChanged, [iconProvider]() {
+        iconProvider->clearCache();
+    });
+
     QQmlContext *shared = engine.rootContext();
     shared->setContextProperty("config", config);
     shared->setContextProperty("theme", theme);
