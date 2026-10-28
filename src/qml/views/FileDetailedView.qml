@@ -1059,54 +1059,18 @@ FocusScope {
                                 && (detRow.hasImagePreview || detRow.hasVideoPreview
                                     || detRow.hasPdfPreview)
 
-                            Item {
+                            Image {
                                 anchors.fill: parent
+                                // Shown until the thumbnail is ready, and for
+                                // good if it never is (corrupt file, missing
+                                // pdftoppm): an Image that is not Ready paints
+                                // nothing at all.
                                 visible: !detThumb.visible
-
-                                readonly property real baseOpacity: detRow.fileName.startsWith(".") ? Theme.hiddenIconOpacity : 1.0
-                                property string currentSource: "image://icon/" + detRow.fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
-                                property string oldSource: ""
-                                property real crossfade: 1.0
-
-                                onCurrentSourceChanged: {
-                                    if (currentDetailedIcon.status === Image.Ready && currentDetailedIcon.source !== "") {
-                                        oldSource = currentDetailedIcon.source
-                                        crossfade = 0.0
-                                        detailedCrossfadeAnim.restart()
-                                    }
-                                }
-
-                                NumberAnimation {
-                                    id: detailedCrossfadeAnim
-                                    target: parent
-                                    property: "crossfade"
-                                    from: 0.0
-                                    to: 1.0
-                                    duration: Theme.animDurationSlow
-                                    easing.type: Theme.animEasingTransition
-                                    easing.bezierCurve: Theme.animBezierCurve
-                                }
-
-                                Image {
-                                    id: oldDetailedIcon
-                                    anchors.fill: parent
-                                    source: parent.oldSource
-                                    sourceSize: Qt.size(root.detailIconSize * Screen.devicePixelRatio,
-                                                        root.detailIconSize * Screen.devicePixelRatio)
-                                    opacity: parent.baseOpacity * (1.0 - parent.crossfade)
-                                    visible: opacity > 0.001
-                                    asynchronous: false
-                                }
-
-                                Image {
-                                    id: currentDetailedIcon
-                                    anchors.fill: parent
-                                    source: parent.currentSource
-                                    sourceSize: Qt.size(root.detailIconSize * Screen.devicePixelRatio,
-                                                        root.detailIconSize * Screen.devicePixelRatio)
-                                    opacity: parent.baseOpacity * parent.crossfade
-                                    asynchronous: false
-                                }
+                                opacity: detRow.fileName.startsWith(".") ? Theme.hiddenIconOpacity : 1
+                                source: "image://icon/" + detRow.fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
+                                sourceSize: Qt.size(root.detailIconSize * Screen.devicePixelRatio,
+                                                    root.detailIconSize * Screen.devicePixelRatio)
+                                asynchronous: true
                             }
 
                             Image {

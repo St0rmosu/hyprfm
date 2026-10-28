@@ -643,57 +643,18 @@ GridView {
             asynchronous: true
         }
 
-        Item {
+        Image {
             id: iconImg
             visible: !thumbImg.visible
+            opacity: delegateItem.fileName.startsWith(".") ? Theme.hiddenIconOpacity : 1
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
             anchors.topMargin: 8
             width: root.iconSize
             height: root.iconSize
-
-            readonly property real baseOpacity: delegateItem.fileName.startsWith(".") ? Theme.hiddenIconOpacity : 1.0
-            property string currentSource: "image://icon/" + delegateItem.fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
-            property string oldSource: ""
-            property real crossfade: 1.0
-
-            onCurrentSourceChanged: {
-                if (currentIcon.status === Image.Ready && currentIcon.source !== "") {
-                    oldSource = currentIcon.source
-                    crossfade = 0.0
-                    crossfadeAnim.restart()
-                }
-            }
-
-            NumberAnimation {
-                id: crossfadeAnim
-                target: iconImg
-                property: "crossfade"
-                from: 0.0
-                to: 1.0
-                duration: Theme.animDurationSlow
-                easing.type: Theme.animEasingTransition
-                easing.bezierCurve: Theme.animBezierCurve
-            }
-
-            Image {
-                id: oldIcon
-                anchors.fill: parent
-                source: iconImg.oldSource
-                sourceSize: Qt.size(root.iconRequestSize, root.iconRequestSize)
-                opacity: iconImg.baseOpacity * (1.0 - iconImg.crossfade)
-                visible: opacity > 0.001
-                asynchronous: false
-            }
-
-            Image {
-                id: currentIcon
-                anchors.fill: parent
-                source: iconImg.currentSource
-                sourceSize: Qt.size(root.iconRequestSize, root.iconRequestSize)
-                opacity: iconImg.baseOpacity * iconImg.crossfade
-                asynchronous: false
-            }
+            source: "image://icon/" + delegateItem.fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
+            sourceSize: Qt.size(root.iconRequestSize, root.iconRequestSize)
+            asynchronous: true
         }
 
         Rectangle {
