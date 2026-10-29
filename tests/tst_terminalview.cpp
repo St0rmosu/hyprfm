@@ -638,6 +638,16 @@ private slots:
         QCOMPARE(opened.at(0).at(0).toString(), QStringLiteral("https://example.com/real"));
     }
 
+    // The label shows the target percent-encoded, so a right-to-left
+    // override (U+202E) cannot make it read as another address.
+    void testLinkLabelEncodesBidi()
+    {
+        TerminalView view;
+        showRow(view, QStringLiteral("'\\033]8;;https://example.com/\\342\\200\\256moc.live\\033\\\\docs\\033]8;;\\033\\\\'"));
+        hover(view, cellCentre(view, 1, 0));
+        QCOMPARE(view.hoveredLink(), QStringLiteral("https://example.com/%E2%80%AEmoc.live"));
+    }
+
     // HyprFM started from `hyprfm &` in a script ignores SIGINT; its shells
     // must not, or Ctrl+C never stops anything.
     void testShellGetsDefaultSignals()

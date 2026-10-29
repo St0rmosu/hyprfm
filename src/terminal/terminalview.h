@@ -84,7 +84,7 @@ public:
     // and output can fake one), else where it started.
     Q_INVOKABLE QString currentDirectory() const;
     QString title() const { return m_title; }
-    QString hoveredLink() const { return m_hoverLink.uri; }
+    QString hoveredLink() const;
     QString searchText() const { return m_searchText; }
     void setSearchText(const QString &text);
     int searchMatchCount() const { return m_searchCount; }
@@ -291,6 +291,7 @@ private:
     bool m_cursorBlink = false;
     int m_scrollbackLines = 10000;
     bool m_tabSwitching = false;
+    bool m_linkClicked = false;
     // Blink phase: the cursor is drawn while true. Flipped by m_blinkTimer,
     // which runs only while focused with blinking on.
     bool m_cursorShown = true;

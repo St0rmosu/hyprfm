@@ -462,10 +462,12 @@ void TerminalView::applyFontOverrides()
         font.setFamily(m_fontFamily);
     if (m_fontSize > 0 || m_zoom != 0) {
         const qreal base = m_fontSize > 0 ? m_fontSize : font.pointSizeF();
-        if (base > 0) {   // a pixel-sized font has no point size to add to
+        if (base > 0) {
             const qreal size = qBound(4.0, base + m_zoom, 72.0);
             m_zoom = size - base;   // so zooming back from a limit starts at once
             font.setPointSizeF(size);
+        } else {
+            m_zoom = 0;   // a pixel-sized font has no point size to add to
         }
     }
     setFont(font);
@@ -627,6 +629,14 @@ void TerminalView::start()
     m_notifier = new QSocketNotifier(fd, QSocketNotifier::Read, this);
     connect(m_notifier, &QSocketNotifier::activated, this, &TerminalView::readPty);
     Q_EMIT runningChanged();
+}
+
+// For the label showing where a link goes: percent-encoded, so bidi
+// overrides, invisible characters and spaces cannot dress up the target.
+QString TerminalView::hoveredLink() const
+{
+    return m_hoverLink.uri.isEmpty() ? QString()
+                                      : QString::fromLatin1(QUrl(m_hoverLink.uri).toEncoded());
 }
 
 QString TerminalView::currentDirectory() const
@@ -1390,6 +1400,7 @@ void TerminalView::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ControlModifier)) {
         const Link link = linkAt(event->position());
         if (!link.uri.isEmpty() && activateLink(link.uri)) {
+            m_linkClicked = true;   // and its release is not the program's either
             event->accept();
             return;
         }
@@ -1424,6 +1435,10 @@ void TerminalView::mouseMoveEvent(QMouseEvent *event)
 
 void TerminalView::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (std::exchange(m_linkClicked, false) && event->button() == Qt::LeftButton) {
+        event->accept();
+        return;
+    }
     if (reportMouse(GHOSTTY_MOUSE_ACTION_RELEASE, ghosttyButton(event->button()), event->position(), event->modifiers(),
                     event->buttons())) {
         event->accept();
