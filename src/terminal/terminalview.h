@@ -285,14 +285,13 @@ private:
     QTimer m_blinkTimer;
     // Visual bell: the view is tinted while this single-shot timer runs.
     QTimer m_bellTimer;
-    // Kitty graphics: converted pixels per image ID, and the clock and
-    // timer that play animations.
+    // Kitty graphics: pixels of the images on screen per image ID, and the
+    // clock and timer that play animations.
     struct CachedImage {
         uint64_t generation = 0;
         QImage pixels;
     };
     QHash<uint32_t, CachedImage> m_imageCache;
-    uint64_t m_imageStorageGeneration = 0;
     GhosttyRenderStateImageIterator m_images = nullptr;
     QElapsedTimer m_clock;
     QTimer m_animationTimer;

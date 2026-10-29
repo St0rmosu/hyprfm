@@ -1621,8 +1621,8 @@ void TerminalView::paintSearchMatches(QPainter *painter)
     }
 }
 
-// The kitty images on screen, lowest first. Pixels are converted once per
-// image generation (a new upload or animation frame), not once per frame.
+// The kitty images on screen, lowest first. Pixels are copied out of the
+// storage once per image generation (a new upload or animation frame).
 QList<TerminalView::Image> TerminalView::imagesToDraw()
 {
     QList<Image> images;
@@ -1635,21 +1635,12 @@ QList<TerminalView::Image> TerminalView::imagesToDraw()
     const uint64_t now = uint64_t(m_clock.elapsed());
     if (ghostty_kitty_graphics_animation_tick(graphics, now, &next) == GHOSTTY_SUCCESS)
         m_animationTimer.start(int(qMax<uint64_t>(8, next > now ? next - now : 0)));
-    // Images deleted or replaced leave the cache when the storage changes.
-    uint64_t storageGeneration = 0;
-    ghostty_kitty_graphics_get(graphics, GHOSTTY_KITTY_GRAPHICS_DATA_GENERATION, &storageGeneration);
-    if (storageGeneration != m_imageStorageGeneration) {
-        m_imageStorageGeneration = storageGeneration;
-        for (auto it = m_imageCache.begin(); it != m_imageCache.end();) {
-            if (ghostty_kitty_graphics_image(graphics, it.key()))
-                ++it;
-            else
-                it = m_imageCache.erase(it);
-        }
-    }
     if (ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_IMAGE_ITERATOR, &m_images)
-        != GHOSTTY_SUCCESS)
+        != GHOSTTY_SUCCESS) {
+        m_imageCache.clear();
         return images;
+    }
+    QHash<uint32_t, CachedImage> drawn;
     while (ghostty_render_state_image_iterator_next(m_images)) {
         GhosttyImageProtocol protocol = GHOSTTY_IMAGE_PROTOCOL_KITTY;
         GhosttyRenderStateImageLayer layer = GHOSTTY_RENDER_STATE_IMAGE_LAYER_ABOVE_TEXT;
@@ -1674,12 +1665,15 @@ QList<TerminalView::Image> TerminalView::imagesToDraw()
             || protocol != GHOSTTY_IMAGE_PROTOCOL_KITTY)
             continue;
 
-        CachedImage &cached = m_imageCache[id];
+        // Only what is on screen stays cached, so the copies never add up
+        // to more than the images in view.
+        CachedImage cached = m_imageCache.value(id);
         if (cached.pixels.isNull() || cached.generation != generation) {
             cached = {generation, imagePixels(graphics, id)};
             if (cached.pixels.isNull())
                 continue;
         }
+        drawn.insert(id, cached);
         Image image;
         image.layer = layer;
         image.z = z;
@@ -1689,6 +1683,7 @@ QList<TerminalView::Image> TerminalView::imagesToDraw()
         image.source = QRectF(srcX, srcY, srcWidth, srcHeight);
         images.append(image);
     }
+    m_imageCache = std::move(drawn);
     std::stable_sort(images.begin(), images.end(),
                      [](const Image &a, const Image &b) { return a.z < b.z; });
     return images;
@@ -1736,9 +1731,10 @@ QImage TerminalView::imagePixels(GhosttyKittyGraphics graphics, uint32_t id)
     const size_t stride = size_t(width) * depth;
     if (length < stride * height)
         return {};
-    // A copy: the storage owns the pixels and may free them on the next write.
-    return QImage(pixels, int(width), int(height), qsizetype(stride), qtFormat)
-        .convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    // A copy in the stored format, so no bigger than what the storage
+    // limit allows: the storage owns the pixels and may free them on the
+    // next write.
+    return QImage(pixels, int(width), int(height), qsizetype(stride), qtFormat).copy();
 }
 
 void TerminalView::paint(QPainter *painter)
