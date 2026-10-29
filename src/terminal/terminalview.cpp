@@ -202,6 +202,11 @@ QString ghosttyString(GhosttyTerminal terminal, GhosttyTerminalData data)
     return QString::fromUtf8(reinterpret_cast<const char *>(s.ptr), qsizetype(s.len));
 }
 
+// Kitty images per screen (main and alternate each get this much). A PNG
+// is refused before decoding if its pixels would not fit, so a small file
+// claiming to be huge costs nothing.
+constexpr uint64_t KittyImageLimit = 64 * 1024 * 1024;
+
 // Kitty graphics PNGs, decoded by Qt into the RGBA rows Ghostty wants.
 // The size is checked before decoding: a tiny PNG can claim to be huge,
 // and Ghostty's allocator refuses what is over the storage limit anyway.
@@ -212,8 +217,9 @@ bool decodePng(void *, const GhosttyAllocator *allocator, const uint8_t *data, s
     QBuffer buffer(&bytes);
     QImageReader reader(&buffer, "png");
     const QSize size = reader.size();
-    if (!size.isValid() || qint64(size.width()) * size.height() > 10000 * 10000)
+    if (!size.isValid() || uint64_t(size.width()) * uint64_t(size.height()) * 4 > KittyImageLimit)
         return false;
+    reader.setAllocationLimit(int(KittyImageLimit / (1024 * 1024)));
     const QImage image = reader.read().convertToFormat(QImage::Format_RGBA8888);
     if (image.isNull())
         return false;
@@ -296,7 +302,7 @@ TerminalView::TerminalView(QQuickItem *parent)
         return true;
     }();
     Q_UNUSED(pngDecoder);
-    const uint64_t imageLimit = 128 * 1024 * 1024;
+    const uint64_t imageLimit = KittyImageLimit;
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &imageLimit);
     const bool off = false;
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE, &off);
@@ -1662,7 +1668,7 @@ QList<TerminalView::Image> TerminalView::imagesToDraw()
     uint64_t next = 0;
     const uint64_t now = uint64_t(m_clock.elapsed());
     if (ghostty_kitty_graphics_animation_tick(graphics, now, &next) == GHOSTTY_SUCCESS)
-        m_animationTimer.start(int(qMax<uint64_t>(8, next > now ? next - now : 0)));
+        m_animationTimer.start(int(qBound<uint64_t>(8, next > now ? next - now : 0, 60000)));
     if (ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_IMAGE_ITERATOR, &m_images)
         != GHOSTTY_SUCCESS) {
         m_imageCache.clear();
@@ -1744,6 +1750,8 @@ QImage TerminalView::imagePixels(GhosttyKittyGraphics graphics, uint32_t id)
         if (length < size_t(width) * height * 2)
             return {};
         QImage rgba(int(width), int(height), QImage::Format_RGBA8888);
+        if (rgba.isNull())
+            return {};
         for (uint32_t y = 0; y < height; ++y) {
             uchar *line = rgba.scanLine(int(y));
             const uint8_t *in = pixels + size_t(y) * width * 2;
