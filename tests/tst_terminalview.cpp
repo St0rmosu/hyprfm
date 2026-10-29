@@ -595,6 +595,98 @@ private slots:
         QCOMPARE(notified.at(1).at(1).toString(), QStringLiteral("later"));
     }
 
+    static void hover(TerminalView &view, QPointF pos)
+    {
+        QHoverEvent event(QEvent::HoverMove, pos, view.mapToGlobal(pos), QPointF(-1, -1));
+        QCoreApplication::sendEvent(&view, &event);
+    }
+
+    static void ctrlClick(TerminalView &view, QPointF pos)
+    {
+        QMouseEvent press(QEvent::MouseButtonPress, pos, pos, view.mapToGlobal(pos), Qt::LeftButton,
+                          Qt::LeftButton, Qt::ControlModifier);
+        QCoreApplication::sendEvent(&view, &press);
+        QMouseEvent release(QEvent::MouseButtonRelease, pos, pos, view.mapToGlobal(pos), Qt::LeftButton,
+                            Qt::NoButton, Qt::ControlModifier);
+        QCoreApplication::sendEvent(&view, &release);
+    }
+
+    // Prints `printfArgs` on the top row of a cleared screen and paints once.
+    static void showRow(TerminalView &view, const QString &printfArgs)
+    {
+        view.setSize(QSizeF(900, 240));
+        view.start();
+        view.sendText(QStringLiteral("clear; printf %1; sleep 5\n").arg(printfArgs));
+        QTest::qWait(500);
+        render(view);
+    }
+
+    // An OSC 8 link shows its real target on hover and opens on Ctrl+click.
+    void testOsc8LinkHoverAndCtrlClick()
+    {
+        TerminalView view;
+        QSignalSpy opened(&view, &TerminalView::linkActivated);
+        showRow(view, QStringLiteral("'\\033]8;;https://example.com/real\\033\\\\docs\\033]8;;\\033\\\\ after'"));
+        hover(view, cellCentre(view, 1, 0));
+        QCOMPARE(view.hoveredLink(), QStringLiteral("https://example.com/real"));
+        hover(view, cellCentre(view, 6, 0));   // "after" is plain text
+        QCOMPARE(view.hoveredLink(), QString());
+        ctrlClick(view, cellCentre(view, 2, 0));
+        QCOMPARE(opened.count(), 1);
+        QCOMPARE(opened.at(0).at(0).toString(), QStringLiteral("https://example.com/real"));
+    }
+
+    // A URL written out in the text is a link too, without the sentence
+    // punctuation or a closing bracket around it.
+    void testPlainUrlIsALink()
+    {
+        TerminalView view;
+        QSignalSpy opened(&view, &TerminalView::linkActivated);
+        showRow(view, QStringLiteral("'(see https://example.com/a_(b)/c?x=1).'"));
+        hover(view, cellCentre(view, 10, 0));
+        QCOMPARE(view.hoveredLink(), QStringLiteral("https://example.com/a_(b)/c?x=1"));
+        ctrlClick(view, cellCentre(view, 10, 0));
+        QCOMPARE(opened.count(), 1);
+        // A plain click selects, as before; it opens nothing.
+        mouse(view, QEvent::MouseButtonPress, cellCentre(view, 10, 0), 1000);
+        mouse(view, QEvent::MouseButtonRelease, cellCentre(view, 10, 0), 1010, Qt::NoButton);
+        QCOMPARE(opened.count(), 1);
+    }
+
+    // file:// links go to HyprFM as a folder: the file's own folder, never
+    // the file itself, and only for this machine.
+    void testFileLinkOpensItsFolder()
+    {
+        QTemporaryDir dir;
+        QFile file(dir.filePath("notes.txt"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.close();
+        TerminalView view;
+        QSignalSpy folder(&view, &TerminalView::folderActivated);
+        QSignalSpy opened(&view, &TerminalView::linkActivated);
+        showRow(view, QStringLiteral("'\\033]8;;file://localhost%1\\033\\\\local\\033]8;;\\033\\\\ \\033]8;;file://elsewhere.example%1\\033\\\\remote\\033]8;;\\033\\\\'")
+                              .arg(file.fileName()));
+        ctrlClick(view, cellCentre(view, 1, 0));
+        QCOMPARE(folder.count(), 1);
+        QCOMPARE(folder.at(0).at(0).toString(), dir.path());
+        ctrlClick(view, cellCentre(view, 8, 0));
+        QCOMPARE(folder.count(), 1);
+        QCOMPARE(opened.count(), 0);
+    }
+
+    // Links to anything but the web, mail or this machine's files do nothing.
+    void testUnsafeLinksAreRefused()
+    {
+        TerminalView view;
+        QSignalSpy opened(&view, &TerminalView::linkActivated);
+        QSignalSpy folder(&view, &TerminalView::folderActivated);
+        showRow(view, QStringLiteral("'\\033]8;;javascript:alert(1)\\033\\\\aaaa\\033]8;;\\033\\\\ \\033]8;;ssh://host/x\\033\\\\bbbb\\033]8;;\\033\\\\ \\033]8;;smb://host/share\\033\\\\cccc\\033]8;;\\033\\\\'"));
+        for (int column : {1, 6, 11})
+            ctrlClick(view, cellCentre(view, column, 0));
+        QCOMPARE(opened.count(), 0);
+        QCOMPARE(folder.count(), 0);
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;

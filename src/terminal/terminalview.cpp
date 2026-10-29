@@ -6,6 +6,7 @@
 #include <QDBusMessage>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QFontInfo>
@@ -17,6 +18,8 @@
 #include <QPainterPath>
 #include <QQuickWindow>
 #include <QSocketNotifier>
+#include <QSysInfo>
+#include <QRegularExpression>
 #include <QStyleHints>
 #include <QUrl>
 #include <QVarLengthArray>
@@ -588,6 +591,9 @@ void TerminalView::readPty()
         Q_EMIT finished();
         break;
     }
+    // New output may have written over (or written) the link under the mouse.
+    if (m_hoverPos.x() >= 0)
+        updateHoverLink();
     update();
 }
 
@@ -902,6 +908,154 @@ GhosttyGridRef TerminalView::refAt(QPointF pos) const
     return ref;
 }
 
+GhosttyGridRef TerminalView::refAtCell(int column, int row) const
+{
+    GhosttyPoint point{};
+    point.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+    point.value.coordinate.x = uint16_t(column);
+    point.value.coordinate.y = uint32_t(row);
+    GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+    ghostty_terminal_grid_ref(m_terminal, point, &ref);
+    return ref;
+}
+
+namespace {
+
+QString hyperlinkUri(const GhosttyGridRef &ref)
+{
+    char buf[512];
+    size_t len = 0;
+    const GhosttyResult result =
+        ghostty_grid_ref_hyperlink_uri(&ref, reinterpret_cast<uint8_t *>(buf), sizeof buf, &len);
+    if (result == GHOSTTY_SUCCESS)
+        return QString::fromUtf8(buf, qsizetype(len));
+    if (result != GHOSTTY_OUT_OF_SPACE || len > 8192)
+        return {};
+    QByteArray big(qsizetype(len), Qt::Uninitialized);
+    if (ghostty_grid_ref_hyperlink_uri(&ref, reinterpret_cast<uint8_t *>(big.data()), size_t(big.size()), &len)
+        != GHOSTTY_SUCCESS)
+        return {};
+    return QString::fromUtf8(big.constData(), qsizetype(len));
+}
+
+} // namespace
+
+// The link under `pos`: an OSC 8 hyperlink if the program made one, else a
+// URL written out in the text of that row. ponytail: a URL wrapped onto
+// the next row is found only up to the wrap.
+TerminalView::Link TerminalView::linkAt(QPointF pos) const
+{
+    Link link;
+    const int column = int((pos.x() - Padding) / m_cellWidth);
+    const int row = int((pos.y() - Padding) / m_cellHeight);
+    if (pos.x() < Padding || pos.y() < Padding || column >= m_cols || row >= m_rowCount)
+        return link;
+
+    const QString osc8 = hyperlinkUri(refAtCell(column, row));
+    if (!osc8.isEmpty()) {
+        link.uri = osc8;
+        link.row = row;
+        link.start = link.end = column;
+        while (link.start > 0 && hyperlinkUri(refAtCell(link.start - 1, row)) == osc8)
+            --link.start;
+        while (link.end + 1 < m_cols && hyperlinkUri(refAtCell(link.end + 1, row)) == osc8)
+            ++link.end;
+        return link;
+    }
+
+    // The row as text, with the column each character came from.
+    QString text;
+    QList<int> columns;
+    uint32_t codepoints[16];
+    for (int c = 0; c < m_cols; ++c) {
+        const GhosttyGridRef ref = refAtCell(c, row);
+        size_t len = 0;
+        if (ghostty_grid_ref_graphemes(&ref, codepoints, 16, &len) != GHOSTTY_SUCCESS || len == 0) {
+            text += QLatin1Char(' ');
+            columns.append(c);
+            continue;
+        }
+        const QString grapheme = QString::fromUcs4(reinterpret_cast<const char32_t *>(codepoints), qsizetype(len));
+        for (qsizetype i = 0; i < grapheme.size(); ++i)
+            columns.append(c);
+        text += grapheme;
+    }
+    static const QRegularExpression url(QStringLiteral(
+        R"((?:https?|ftp|file)://[^\s<>"'`{}|\\^]+|mailto:[^\s<>"'`{}|\\^]+)"),
+        QRegularExpression::CaseInsensitiveOption);
+    for (auto it = url.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        QString found = match.captured();
+        // Sentence punctuation and a closing bracket the URL did not open
+        // belong to the text around it.
+        while (!found.isEmpty()) {
+            const QChar last = found.back();
+            if (QStringLiteral(".,;:!?'\"").contains(last)) {
+                found.chop(1);
+            } else if ((last == QLatin1Char(')') && found.count(QLatin1Char('(')) < found.count(QLatin1Char(')')))
+                       || (last == QLatin1Char(']') && found.count(QLatin1Char('[')) < found.count(QLatin1Char(']')))) {
+                found.chop(1);
+            } else {
+                break;
+            }
+        }
+        const qsizetype first = match.capturedStart();
+        const qsizetype last = first + found.size() - 1;
+        if (found.isEmpty() || columns.at(first) > column || columns.at(last) < column)
+            continue;
+        link.uri = found;
+        link.row = row;
+        link.start = columns.at(first);
+        link.end = columns.at(last);
+        return link;
+    }
+    return link;
+}
+
+void TerminalView::updateHoverLink()
+{
+    const Link link = m_hoverPos.x() < 0 ? Link() : linkAt(m_hoverPos);
+    if (link == m_hoverLink)
+        return;
+    const bool uriChanged = link.uri != m_hoverLink.uri;
+    m_hoverLink = link;
+    setCursor(link.row >= 0 ? Qt::PointingHandCursor : Qt::IBeamCursor);
+    update();
+    if (uriChanged)
+        Q_EMIT hoveredLinkChanged();
+}
+
+// Output decides what a click on it does, so only harmless kinds of link
+// are opened: web and mail links by the desktop, and file:// links to this
+// machine by HyprFM itself, which shows the place rather than running what
+// is there. A file:// link from an ssh session names the other machine.
+bool TerminalView::activateLink(const QString &uri)
+{
+    if (uri.size() > 8192)
+        return false;
+    const QUrl url(uri, QUrl::StrictMode);
+    if (!url.isValid())
+        return false;
+    const QString scheme = url.scheme().toLower();
+    if (scheme == QLatin1String("file")) {
+        const QString host = url.host();
+        if (!host.isEmpty() && host != QLatin1String("localhost")
+            && host.compare(QSysInfo::machineHostName(), Qt::CaseInsensitive) != 0)
+            return false;
+        const QFileInfo info(url.path(QUrl::FullyDecoded));
+        if (!info.isAbsolute() || !info.exists())
+            return false;
+        Q_EMIT folderActivated(info.isDir() ? info.absoluteFilePath() : info.absolutePath());
+        return true;
+    }
+    static const QStringList web{QStringLiteral("http"), QStringLiteral("https"), QStringLiteral("ftp"),
+                                 QStringLiteral("mailto")};
+    if (!web.contains(scheme) || (scheme != QLatin1String("mailto") && url.host().isEmpty()))
+        return false;
+    Q_EMIT linkActivated(url.toString(QUrl::FullyEncoded));
+    return true;
+}
+
 // Runs one press, drag or release through Ghostty's gesture state machine
 // (cell drag, word on double click, line on triple) and installs the
 // selection it yields. Returns whether there is one.
@@ -1070,6 +1224,14 @@ bool TerminalView::reportMouse(GhosttyMouseAction action, GhosttyMouseButton but
 void TerminalView::mousePressEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
+    // Ctrl+click opens a link, even under a program tracking the mouse.
+    if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ControlModifier)) {
+        const Link link = linkAt(event->position());
+        if (!link.uri.isEmpty() && activateLink(link.uri)) {
+            event->accept();
+            return;
+        }
+    }
     if (reportMouse(GHOSTTY_MOUSE_ACTION_PRESS, ghosttyButton(event->button()), event->position(), event->modifiers(),
                     event->buttons())) {
         event->accept();
@@ -1115,8 +1277,17 @@ void TerminalView::mouseReleaseEvent(QMouseEvent *event)
     event->accept();
 }
 
+void TerminalView::hoverLeaveEvent(QHoverEvent *event)
+{
+    m_hoverPos = QPointF(-1, -1);
+    updateHoverLink();
+    QQuickPaintedItem::hoverLeaveEvent(event);
+}
+
 void TerminalView::hoverMoveEvent(QHoverEvent *event)
 {
+    m_hoverPos = event->position();
+    updateHoverLink();
     // Motion with no button down only reaches programs in any-event
     // tracking; the encoder drops it for the other modes.
     reportMouse(GHOSTTY_MOUSE_ACTION_MOTION, GHOSTTY_MOUSE_BUTTON_UNKNOWN, event->position(), event->modifiers(),
@@ -1161,6 +1332,7 @@ void TerminalView::wheelEvent(QWheelEvent *event)
     GhosttyTerminalScrollViewport scroll{GHOSTTY_SCROLL_VIEWPORT_DELTA, {}};
     scroll.value.delta = -lines;
     ghostty_terminal_scroll_viewport(m_terminal, scroll);
+    updateHoverLink();
     update();
     event->accept();
 }
@@ -1305,6 +1477,13 @@ void TerminalView::paint(QPainter *painter)
         }
         flush();
         y += m_cellHeight;
+    }
+
+    if (m_hoverLink.row >= 0) {
+        const qreal lineY = Padding + m_hoverLink.row * m_cellHeight + m_ascent + thickness;
+        painter->fillRect(QRectF(Padding + m_hoverLink.start * m_cellWidth, lineY,
+                                 (m_hoverLink.end - m_hoverLink.start + 1) * m_cellWidth, thickness),
+                          qcolor(colors.foreground));
     }
 
     if (m_bellTimer.isActive()) {

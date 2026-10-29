@@ -50,6 +50,9 @@ class TerminalView : public QQuickPaintedItem
     // Whether OSC 9 / OSC 777 notifications go to the desktop's notification
     // server; the notification signal fires either way.
     Q_PROPERTY(bool desktopNotifications MEMBER m_desktopNotifications)
+    // Where the link under the mouse goes (an OSC 8 link's real target, not
+    // its text), empty when there is none. Ctrl+click opens it.
+    Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged)
 
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
@@ -59,6 +62,7 @@ public:
     void setWorkingDirectory(const QString &dir);
     QString shellDirectory() const { return m_shellDirectory; }
     QString title() const { return m_title; }
+    QString hoveredLink() const { return m_hoverLink.uri; }
     bool running() const { return m_ptyFd >= 0; }
     QFont font() const { return m_font; }
     void setFont(const QFont &font);
@@ -117,6 +121,12 @@ signals:
     // A notification from the program (OSC 9, OSC 777), plain text, length
     // capped, at most one a second.
     void notification(const QString &title, const QString &body);
+    void hoveredLinkChanged();
+    // Ctrl+click on a web or mail link (http, https, ftp, mailto).
+    void linkActivated(const QString &url);
+    // Ctrl+click on a file:// link to this machine: the folder it names, or
+    // the folder holding the file it names.
+    void folderActivated(const QString &path);
 
 protected:
     bool event(QEvent *event) override;
@@ -128,6 +138,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void hoverMoveEvent(QHoverEvent *event) override;
+    void hoverLeaveEvent(QHoverEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
 
@@ -144,6 +155,21 @@ private:
     void resizeGrid();
     void applyColors();
     GhosttyGridRef refAt(QPointF pos) const;
+    GhosttyGridRef refAtCell(int column, int row) const;
+    // A link on one viewport row: columns start..end, inclusive.
+    struct Link {
+        QString uri;
+        int row = -1;
+        int start = 0;
+        int end = -1;
+        bool operator==(const Link &o) const
+        {
+            return uri == o.uri && row == o.row && start == o.start && end == o.end;
+        }
+    };
+    Link linkAt(QPointF pos) const;
+    void updateHoverLink();
+    bool activateLink(const QString &uri);
     bool selectionGesture(GhosttySelectionGestureEvent event, QMouseEvent *mouse);
     void clearSelection();
     bool reportMouse(GhosttyMouseAction action, GhosttyMouseButton button, QPointF pos,
@@ -184,6 +210,8 @@ private:
     QString m_title;
     QStringList m_windowShortcuts;
     bool m_desktopNotifications = true;
+    Link m_hoverLink;
+    QPointF m_hoverPos{-1, -1};
     QElapsedTimer m_lastNotification;
     QFont m_font;
     QString m_fontFamily;

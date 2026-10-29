@@ -4525,6 +4525,14 @@ ApplicationWindow {
                             root.pendingTerminalPaste = text
                             root.openDialog(terminalPasteConfirmDialogLoader)
                         }
+                        // The view only passes on web, mail and local
+                        // folder links; see TerminalView::activateLink().
+                        function onLinkActivated(url) {
+                            Qt.openUrlExternally(url)
+                        }
+                        function onFolderActivated(path) {
+                            root.navigateActivePaneTo(path)
+                        }
                     }
                 }
 

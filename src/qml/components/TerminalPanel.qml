@@ -16,6 +16,8 @@ Item {
 
     signal finished()
     signal unsafePaste(string text)
+    signal linkActivated(string url)
+    signal folderActivated(string path)
 
     // Drag handle on the top edge
     Rectangle {
@@ -55,5 +57,31 @@ Item {
         windowShortcuts: panel.windowShortcuts
         onFinished: panel.finished()
         onUnsafePaste: (text) => panel.unsafePaste(text)
+        onLinkActivated: (url) => panel.linkActivated(url)
+        onFolderActivated: (path) => panel.folderActivated(path)
+    }
+
+    // Where the link under the mouse really goes, as a browser shows it:
+    // an OSC 8 link's text can say anything.
+    Rectangle {
+        objectName: "terminalLinkStatus"
+        visible: view.hoveredLink !== ""
+        anchors { left: parent.left; bottom: parent.bottom; margins: 4 }
+        width: Math.min(linkText.implicitWidth + 12, parent.width - 8)
+        height: linkText.implicitHeight + 6
+        radius: Theme.radiusSmall
+        color: Theme.mantle
+        border.color: Theme.overlay
+
+        Text {
+            id: linkText
+            anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
+            verticalAlignment: Text.AlignVCenter
+            text: view.hoveredLink + "  ·  Ctrl+click to open"
+            textFormat: Text.PlainText
+            elide: Text.ElideMiddle
+            color: Theme.subtext
+            font.pointSize: Theme.baseFontSize - 1
+        }
     }
 }
