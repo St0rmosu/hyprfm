@@ -450,6 +450,7 @@ void TerminalView::updateCellSize()
     m_cellWidth = qCeil(metrics.horizontalAdvance(QLatin1Char('M')));
     m_cellHeight = qCeil(metrics.height());
     m_ascent = metrics.ascent();
+    m_capHeight = metrics.capHeight();
 
     // Runs of cells are drawn as one string, so every glyph has to advance
     // exactly one cell: letter spacing makes up the gap to the whole-pixel
@@ -1518,8 +1519,12 @@ void TerminalView::paint(QPainter *painter)
                           y + m_ascent, y + m_cellHeight, thickness, m_cellWidth);
         if (run.strikethrough)
             painter->fillRect(QRectF(run.x, y + m_cellHeight / 2 - thickness / 2, end - run.x, thickness), color);
+        // Just above the capitals: at the cell's top edge it reads as an
+        // underline of the row above.
         if (run.overline)
-            painter->fillRect(QRectF(run.x, y, end - run.x, thickness), color);
+            painter->fillRect(QRectF(run.x, y + qMax(0.0, m_ascent - m_capHeight - 2 * thickness), end - run.x,
+                                     thickness),
+                              color);
         run.text.clear();
         run.cells = 0;
     };

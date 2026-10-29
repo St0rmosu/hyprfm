@@ -260,6 +260,7 @@ private:
     qreal m_cellWidth = 8;
     qreal m_cellHeight = 16;
     qreal m_ascent = 12;
+    qreal m_capHeight = 9;
     uint16_t m_cols = 80;
     uint16_t m_rowCount = 24;
     qreal m_scrollRemainder = 0;
