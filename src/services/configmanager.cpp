@@ -1,4 +1,5 @@
 #include "services/configmanager.h"
+#include "services/themeloader.h"
 
 #define TOML_HEADER_ONLY 1
 #include "third_party/toml.hpp"
@@ -270,6 +271,8 @@ QStringList ConfigManager::availableThemes() const
                 themes.append(name);
         }
     }
+    if (QFile::exists(ThemeLoader::pywalColorsPath()) && !themes.contains("pywal"))
+        themes.append(QStringLiteral("pywal"));
     themes.sort(Qt::CaseInsensitive);
     return themes;
 }

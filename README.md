@@ -339,6 +339,7 @@ Config lives at `~/.config/hyprfm/config.toml`. On first run HyprFM writes it fu
 ```toml
 [general]
 # theme = "catppuccin-mocha"   # active theme; filename in themes/ without .toml
+                               # "pywal" follows ~/.cache/wal/colors.json live
 light_theme = "catppuccin-latte"  # the Dark Mode switch in Settings flips
 dark_theme = "catppuccin-mocha"   # between these two
 icon_theme = "Adwaita"         # system icon theme fallback

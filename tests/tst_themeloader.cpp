@@ -1,5 +1,6 @@
 #include <QTest>
 #include <QTemporaryDir>
+#include <QDir>
 #include <QFile>
 #include <QSignalSpy>
 #include "services/themeloader.h"
@@ -223,6 +224,45 @@ private slots:
 
         QVERIFY(spy.wait(5000));
         QCOMPARE(loader.color("base"), QColor("#222222"));
+    }
+
+    void testPywalThemeReadsWalCache()
+    {
+        QTemporaryDir dir;
+        qputenv("XDG_CACHE_HOME", dir.path().toUtf8());
+        QVERIFY(QDir().mkpath(dir.filePath("wal")));
+        QFile file(ThemeLoader::pywalColorsPath());
+        QCOMPARE(file.fileName(), dir.filePath("wal/colors.json"));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("{\"special\": {\"background\": \"#000000\", \"foreground\": \"#ffffff\"},"
+                   " \"colors\": {\"color1\": \"#ff0000\", \"color2\": \"#00ff00\","
+                   " \"color3\": \"#ffff00\", \"color4\": \"#0000ff\"}}");
+        file.close();
+
+        ThemeLoader loader;
+        loader.loadTheme("pywal", QStringList{QString(THEMES_DIR)});
+        qunsetenv("XDG_CACHE_HOME");
+        QCOMPARE(loader.color("base"), QColor("#000000"));
+        QCOMPARE(loader.color("text"), QColor("#ffffff"));
+        QCOMPARE(loader.color("accent"), QColor("#0000ff"));
+        QCOMPARE(loader.color("success"), QColor("#00ff00"));
+        QCOMPARE(loader.color("warning"), QColor("#ffff00"));
+        QCOMPARE(loader.color("error"), QColor("#ff0000"));
+        // The ramp sits between background and foreground; black has nothing darker.
+        QCOMPARE(loader.color("crust"), QColor("#000000"));
+        QVERIFY(loader.color("surface").lightness() > 0);
+        QVERIFY(loader.color("surface").lightness() < loader.color("overlay").lightness());
+        QVERIFY(loader.color("muted").lightness() < loader.color("subtext").lightness());
+
+        // wal -l: mantle and crust still go darker than base, like the bundled light themes.
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write("{\"special\": {\"background\": \"#f2e5bc\", \"foreground\": \"#504945\"}}");
+        file.close();
+        loader.loadTheme(file.fileName(), QStringList{});
+        QCOMPARE(loader.color("base"), QColor("#f2e5bc"));
+        QVERIFY(loader.color("mantle").lightness() < loader.color("base").lightness());
+        QVERIFY(loader.color("crust").lightness() < loader.color("mantle").lightness());
+        QVERIFY(loader.color("surface").lightness() > loader.color("overlay").lightness());
     }
 };
 

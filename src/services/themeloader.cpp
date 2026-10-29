@@ -4,6 +4,8 @@
 #include <QFile>
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QDebug>
 
 QMap<QString, QColor> ThemeLoader::s_defaults = {
@@ -56,6 +58,10 @@ void ThemeLoader::watchThemeFile(const QString &filePath)
 
 void ThemeLoader::applyThemeFile(const QString &filePath)
 {
+    if (filePath.endsWith(QStringLiteral(".json"))) {
+        applyPywalFile(filePath);
+        return;
+    }
     m_colors = s_defaults;
     try {
         auto config = toml::parse_file(filePath.toStdString());
@@ -75,10 +81,57 @@ void ThemeLoader::applyThemeFile(const QString &filePath)
     emit themeChanged();
 }
 
+// pywal only gives a background, a foreground and sixteen terminal colours, so
+// the surface ramp is mixed from background towards foreground. That keeps it
+// right for both dark and light (wal -l) palettes. Mantle and crust are darker
+// than base in both, like the bundled themes.
+void ThemeLoader::applyPywalFile(const QString &filePath)
+{
+    m_colors = s_defaults;
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "Theme not readable:" << filePath;
+        emit themeChanged();
+        return;
+    }
+    const QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+    const QJsonObject special = root.value("special").toObject();
+    const QJsonObject colors = root.value("colors").toObject();
+    const QColor bg(special.value("background").toString());
+    const QColor fg(special.value("foreground").toString());
+    if (!bg.isValid() || !fg.isValid()) {
+        qWarning() << "Theme parse error: no pywal background/foreground in" << filePath;
+        emit themeChanged();
+        return;
+    }
+    const auto mix = [&](qreal t) {
+        return QColor::fromRgbF(bg.redF() + (fg.redF() - bg.redF()) * t,
+                                bg.greenF() + (fg.greenF() - bg.greenF()) * t,
+                                bg.blueF() + (fg.blueF() - bg.blueF()) * t);
+    };
+    m_colors["base"] = bg;
+    m_colors["mantle"] = bg.darker(108);
+    m_colors["crust"] = bg.darker(116);
+    m_colors["surface"] = mix(0.12);
+    m_colors["overlay"] = mix(0.24);
+    m_colors["muted"] = mix(0.45);
+    m_colors["subtext"] = mix(0.8);
+    m_colors["text"] = fg;
+    for (const auto &[key, index] : {std::pair{"accent", "color4"}, std::pair{"success", "color2"},
+                                     std::pair{"warning", "color3"}, std::pair{"error", "color1"}}) {
+        const QColor c(colors.value(index).toString());
+        if (c.isValid())
+            m_colors[key] = c;
+    }
+    emit themeChanged();
+}
+
 void ThemeLoader::loadTheme(const QString &nameOrPath, const QStringList &themesDirs)
 {
     QString filePath;
-    if (QFile::exists(nameOrPath)) {
+    if (nameOrPath == QStringLiteral("pywal")) {
+        filePath = pywalColorsPath();
+    } else if (QFile::exists(nameOrPath)) {
         filePath = nameOrPath;
     } else {
         // First directory wins, so the user's ~/.config themes shadow bundled ones.
