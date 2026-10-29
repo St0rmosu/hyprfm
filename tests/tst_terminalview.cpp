@@ -474,9 +474,21 @@ private slots:
     // SGR 58 recolours them. Each style is told apart by its pixel profile
     // under the text: rows lit (double has two bands) and columns lit
     // (dotted and dashed leave gaps, a wave moves between rows).
+    // Small fonts leave little room under the baseline, where a double
+    // underline once spilled into the next row and the wave went flat.
+    void testUnderlineStyles_data()
+    {
+        QTest::addColumn<int>("pointSize");
+        QTest::newRow("default") << 0;
+        QTest::newRow("7pt") << 7;
+        QTest::newRow("14pt") << 14;
+    }
+
     void testUnderlineStyles()
     {
+        QFETCH(int, pointSize);
         TerminalView view;
+        view.setFontSize(pointSize);
         view.setSize(QSizeF(640, 240));
         view.setBackground(Qt::black);
         view.setForeground(Qt::white);

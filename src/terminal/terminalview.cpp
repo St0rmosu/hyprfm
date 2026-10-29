@@ -149,8 +149,10 @@ void drawUnderline(QPainter *painter, int style, const QColor &color, qreal x0, 
     painter->save();
     switch (style) {
     case GHOSTTY_SGR_UNDERLINE_DOUBLE: {
+        // Both lines stay in the cell: with little room under the baseline
+        // (small fonts) the pair moves up rather than into the next row.
         const qreal gap = qMax(2.0, thickness);
-        const qreal first = qMax(baseline, qMin(top, bottom - 2 * thickness - gap));
+        const qreal first = qMin(top, bottom - 2 * thickness - gap);
         painter->fillRect(QRectF(x0, first, x1 - x0, thickness), color);
         painter->fillRect(QRectF(x0, first + thickness + gap, x1 - x0, thickness), color);
         break;
@@ -162,11 +164,13 @@ void drawUnderline(QPainter *painter, int style, const QColor &color, qreal x0, 
         const qreal mid = baseline + (bottom - baseline) / 2;
         const qreal period = qMax(4.0, cellWidth);
         QPainterPath wave(QPointF(x0, mid));
+        // A quadratic curve peaks halfway to its control point, so the
+        // control sits at twice the amplitude.
         for (qreal x = x0; x < x1; x += period) {
             const qreal half = period / 2;
-            wave.quadTo(x + half / 2, mid - amplitude, qMin(x + half, x1), mid);
+            wave.quadTo(x + half / 2, mid - 2 * amplitude, qMin(x + half, x1), mid);
             if (x + half < x1)
-                wave.quadTo(x + half + half / 2, mid + amplitude, qMin(x + period, x1), mid);
+                wave.quadTo(x + half + half / 2, mid + 2 * amplitude, qMin(x + period, x1), mid);
         }
         painter->setRenderHint(QPainter::Antialiasing);
         painter->setClipRect(QRectF(x0, baseline - thickness, x1 - x0, bottom - baseline + thickness));
