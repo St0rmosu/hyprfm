@@ -387,8 +387,14 @@ void TerminalView::applyFontOverrides()
     QFont font = defaultTerminalFont();
     if (!m_fontFamily.isEmpty())
         font.setFamily(m_fontFamily);
-    if (m_fontSize > 0)
-        font.setPointSizeF(m_fontSize);
+    if (m_fontSize > 0 || m_zoom != 0) {
+        const qreal base = m_fontSize > 0 ? m_fontSize : font.pointSizeF();
+        if (base > 0) {   // a pixel-sized font has no point size to add to
+            const qreal size = qBound(4.0, base + m_zoom, 72.0);
+            m_zoom = size - base;   // so zooming back from a limit starts at once
+            font.setPointSizeF(size);
+        }
+    }
     setFont(font);
 }
 
@@ -865,6 +871,17 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         Q_EMIT searchRequested();
         event->accept();
         return;
+    }
+    // Zoom for this session, as in Ghostty: Ctrl+= / Ctrl+- / Ctrl+0.
+    const Qt::KeyboardModifiers mods = event->modifiers() & ~(Qt::KeypadModifier | Qt::ShiftModifier);
+    if (mods == Qt::ControlModifier) {
+        const int key = event->key();
+        if (key == Qt::Key_Equal || key == Qt::Key_Plus || key == Qt::Key_Minus || key == Qt::Key_0) {
+            m_zoom = key == Qt::Key_0 ? 0 : m_zoom + (key == Qt::Key_Minus ? -1 : 1);
+            applyFontOverrides();
+            event->accept();
+            return;
+        }
     }
     if (combo == QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_V)
         || combo == QKeyCombination(Qt::ShiftModifier, Qt::Key_Insert)) {

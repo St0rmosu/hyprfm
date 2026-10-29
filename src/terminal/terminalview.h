@@ -256,6 +256,7 @@ private:
     QFont m_font;
     QString m_fontFamily;
     qreal m_fontSize = 0;
+    qreal m_zoom = 0;   // points added by Ctrl+= / Ctrl+-
     bool m_ligatures = false;
     QString m_cursorStyle = QStringLiteral("block");
     bool m_cursorBlink = false;

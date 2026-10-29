@@ -759,6 +759,32 @@ private slots:
         QCOMPARE(view.scrollOffset() + view.scrollLength(), view.scrollTotal());
     }
 
+    // Ctrl+= and Ctrl+- zoom by a point within 4-72, Ctrl+0 resets.
+    void testZoomKeys()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setFontSize(10);
+        view.start();
+        auto press = [&](int key) {
+            QKeyEvent event(QEvent::KeyPress, key, Qt::ControlModifier);
+            QCoreApplication::sendEvent(&view, &event);
+        };
+        press(Qt::Key_Equal);
+        press(Qt::Key_Equal);
+        QCOMPARE(view.font().pointSizeF(), 12.0);
+        press(Qt::Key_Minus);
+        QCOMPARE(view.font().pointSizeF(), 11.0);
+        for (int i = 0; i < 20; ++i)
+            press(Qt::Key_Minus);
+        QCOMPARE(view.font().pointSizeF(), 4.0);
+        press(Qt::Key_Equal);   // back up at once from the limit
+        QCOMPARE(view.font().pointSizeF(), 5.0);
+        press(Qt::Key_0);
+        QCOMPARE(view.font().pointSizeF(), 10.0);
+        QCOMPARE(view.fontSize(), 10.0);   // the setting itself is untouched
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;
