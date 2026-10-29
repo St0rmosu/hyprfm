@@ -63,6 +63,56 @@ Item {
         onSearchRequested: panel.openFind()
     }
 
+    // Overlay scrollbar on the right edge. It shows while the view is up
+    // in the scrollback (a reminder that new output is below), while the
+    // mouse is near the edge, and while dragging; at the prompt it hides.
+    Item {
+        id: scrollbar
+        objectName: "terminalScrollbar"
+        readonly property bool scrollable: view.scrollTotal > view.scrollLength
+        readonly property bool inHistory: view.scrollOffset + view.scrollLength < view.scrollTotal
+        anchors { right: parent.right; top: parent.top; bottom: parent.bottom; topMargin: 3; bottomMargin: 3 }
+        width: 12
+        visible: scrollable
+        opacity: inHistory || scrollMouse.containsMouse || scrollMouse.pressed ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.animDurationFast } }
+
+        Rectangle {
+            id: thumb
+            readonly property real ratio: view.scrollTotal > 0 ? view.scrollLength / view.scrollTotal : 1
+            anchors.right: parent.right
+            anchors.rightMargin: 2
+            width: scrollMouse.containsMouse || scrollMouse.pressed ? 8 : 4
+            height: Math.max(24, scrollbar.height * ratio)
+            y: view.scrollTotal > view.scrollLength
+               ? (scrollbar.height - height) * view.scrollOffset / (view.scrollTotal - view.scrollLength) : 0
+            radius: width / 2
+            color: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, scrollMouse.pressed ? 0.55 : 0.35)
+            Behavior on width { NumberAnimation { duration: Theme.animDurationFast } }
+        }
+
+        MouseArea {
+            id: scrollMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            enabled: scrollbar.scrollable
+            property real grabOffset: 0
+            // Grabbing the thumb keeps it under the pointer; pressing the
+            // track centres the thumb there.
+            onPressed: (mouse) => {
+                grabOffset = mouse.y >= thumb.y && mouse.y <= thumb.y + thumb.height
+                    ? mouse.y - thumb.y : thumb.height / 2
+                scrollTo(mouse.y)
+            }
+            onPositionChanged: (mouse) => { if (pressed) scrollTo(mouse.y) }
+            function scrollTo(y) {
+                const travel = scrollbar.height - thumb.height
+                const fraction = travel > 0 ? Math.max(0, Math.min(1, (y - grabOffset) / travel)) : 0
+                view.scrollToRow(Math.round(fraction * (view.scrollTotal - view.scrollLength)))
+            }
+        }
+    }
+
     function openFind() {
         findBar.visible = true
         findInput.selectAll()

@@ -487,6 +487,7 @@ void TerminalView::resizeGrid()
         winsize ws{rows, cols, uint16_t(cols * m_cellWidth), uint16_t(rows * m_cellHeight)};
         ioctl(m_ptyFd, TIOCSWINSZ, &ws);
     }
+    updateScrollbar();
     update();
 }
 
@@ -602,6 +603,7 @@ void TerminalView::readPty()
         updateHoverLink();
     if (!m_searchText.isEmpty() && !m_searchRefresh.isActive())
         m_searchRefresh.start();
+    updateScrollbar();
     update();
 }
 
@@ -875,6 +877,7 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     // Typing jumps back to the prompt from wherever scrollback was.
     ghostty_terminal_scroll_viewport(m_terminal, GhosttyTerminalScrollViewport{
         GHOSTTY_SCROLL_VIEWPORT_BOTTOM, {}});
+    updateScrollbar();
     sendKey(event, event->isAutoRepeat() ? GHOSTTY_KEY_ACTION_REPEAT : GHOSTTY_KEY_ACTION_PRESS);
     event->accept();
     update();
@@ -1197,6 +1200,7 @@ void TerminalView::pasteText(const QString &text)
         return;
     ghostty_terminal_scroll_viewport(m_terminal, GhosttyTerminalScrollViewport{
         GHOSTTY_SCROLL_VIEWPORT_BOTTOM, {}});
+    updateScrollbar();
     writePty(out.constData(), qsizetype(written));
 }
 
@@ -1363,11 +1367,34 @@ void TerminalView::wheelEvent(QWheelEvent *event)
     GhosttyTerminalScrollViewport scroll{GHOSTTY_SCROLL_VIEWPORT_DELTA, {}};
     scroll.value.delta = -lines;
     ghostty_terminal_scroll_viewport(m_terminal, scroll);
+    updateScrollbar();
     updateHoverLink();
     if (!m_searchText.isEmpty())
         refreshSearch();   // the highlights follow the viewport
     update();
     event->accept();
+}
+
+void TerminalView::updateScrollbar()
+{
+    GhosttyTerminalScrollbar bar{0, 0, 0};
+    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &bar);
+    if (bar.total == m_scrollbar.total && bar.offset == m_scrollbar.offset && bar.len == m_scrollbar.len)
+        return;
+    m_scrollbar = bar;
+    Q_EMIT scrollChanged();
+}
+
+void TerminalView::scrollToRow(qreal row)
+{
+    GhosttyTerminalScrollViewport scroll{GHOSTTY_SCROLL_VIEWPORT_ROW, {}};
+    scroll.value.row = size_t(qMax(0.0, row));
+    ghostty_terminal_scroll_viewport(m_terminal, scroll);
+    updateScrollbar();
+    updateHoverLink();
+    if (!m_searchText.isEmpty())
+        refreshSearch();
+    update();
 }
 
 void TerminalView::setSearchText(const QString &text)
@@ -1420,6 +1447,7 @@ void TerminalView::refreshSearch()
             index = int(selected) + 1;
         count = int(total);
     }
+    updateScrollbar();   // selecting a match may have scrolled to it
     update();
     if (count == m_searchCount && index == m_searchIndex)
         return;

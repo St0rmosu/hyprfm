@@ -60,6 +60,11 @@ class TerminalView : public QQuickPaintedItem
     Q_PROPERTY(int searchMatchCount READ searchMatchCount NOTIFY searchChanged)
     Q_PROPERTY(int searchMatchIndex READ searchMatchIndex NOTIFY searchChanged)
     Q_PROPERTY(QColor matchColor MEMBER m_matchColor NOTIFY colorsChanged)
+    // The scrollback in rows, for a scrollbar: all of it, where the view
+    // starts, and how many rows it shows.
+    Q_PROPERTY(qreal scrollTotal READ scrollTotal NOTIFY scrollChanged)
+    Q_PROPERTY(qreal scrollOffset READ scrollOffset NOTIFY scrollChanged)
+    Q_PROPERTY(qreal scrollLength READ scrollLength NOTIFY scrollChanged)
 
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
@@ -74,6 +79,9 @@ public:
     void setSearchText(const QString &text);
     int searchMatchCount() const { return m_searchCount; }
     int searchMatchIndex() const { return m_searchIndex; }
+    qreal scrollTotal() const { return qreal(m_scrollbar.total); }
+    qreal scrollOffset() const { return qreal(m_scrollbar.offset); }
+    qreal scrollLength() const { return qreal(m_scrollbar.len); }
     bool running() const { return m_ptyFd >= 0; }
     QFont font() const { return m_font; }
     void setFont(const QFont &font);
@@ -116,6 +124,8 @@ public:
     // The next match up into older output, and back down; both wrap.
     Q_INVOKABLE void findNext();
     Q_INVOKABLE void findPrevious();
+    // Shows the scrollback from `row` down (0 is the oldest row).
+    Q_INVOKABLE void scrollToRow(qreal row);
 
     void paint(QPainter *painter) override;
 
@@ -137,6 +147,7 @@ signals:
     void notification(const QString &title, const QString &body);
     void hoveredLinkChanged();
     void searchChanged();
+    void scrollChanged();
     // Ctrl+Shift+F: the panel shows its find bar.
     void searchRequested();
     // Ctrl+click on a web or mail link (http, https, ftp, mailto).
@@ -188,6 +199,7 @@ private:
     void updateHoverLink();
     bool activateLink(const QString &uri);
     void refreshSearch();
+    void updateScrollbar();
     void paintSearchMatches(QPainter *painter);
     bool selectionGesture(GhosttySelectionGestureEvent event, QMouseEvent *mouse);
     void clearSelection();
@@ -230,6 +242,7 @@ private:
     QStringList m_windowShortcuts;
     bool m_desktopNotifications = true;
     Link m_hoverLink;
+    GhosttyTerminalScrollbar m_scrollbar{0, 0, 0};
     GhosttySearch m_search = nullptr;
     QString m_searchText;
     int m_searchCount = 0;

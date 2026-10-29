@@ -738,6 +738,27 @@ private slots:
         QCOMPARE(countPixels(render(view), green), 0);
     }
 
+    // The scroll state follows output and scrolling, and scrollToRow goes
+    // to a row of the scrollback.
+    void testScrollbarState()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        QSignalSpy changed(&view, &TerminalView::scrollChanged);
+        view.start();
+        view.sendText(QStringLiteral("clear; seq 1 100; sleep 5\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(view.scrollTotal() > 100, 5000);
+        QVERIFY(changed.count() > 0);
+        QCOMPARE(view.scrollOffset() + view.scrollLength(), view.scrollTotal());   // at the bottom
+        view.scrollToRow(0);
+        QCOMPARE(view.scrollOffset(), 0.0);
+        view.scrollToRow(10);
+        QCOMPARE(view.scrollOffset(), 10.0);
+        // Typing returns to the prompt.
+        type(view, QStringLiteral(" "));
+        QCOMPARE(view.scrollOffset() + view.scrollLength(), view.scrollTotal());
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;
