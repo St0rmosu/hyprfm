@@ -1664,11 +1664,6 @@ QList<TerminalView::Image> TerminalView::imagesToDraw()
     if (ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS, &graphics) != GHOSTTY_SUCCESS
         || !graphics)
         return images;
-    // Animations: show the due frame and wake for the next one.
-    uint64_t next = 0;
-    const uint64_t now = uint64_t(m_clock.elapsed());
-    if (ghostty_kitty_graphics_animation_tick(graphics, now, &next) == GHOSTTY_SUCCESS)
-        m_animationTimer.start(int(qBound<uint64_t>(8, next > now ? next - now : 0, 60000)));
     if (ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_IMAGE_ITERATOR, &m_images)
         != GHOSTTY_SUCCESS) {
         m_imageCache.clear();
@@ -1775,6 +1770,17 @@ QImage TerminalView::imagePixels(GhosttyKittyGraphics graphics, uint32_t id)
 
 void TerminalView::paint(QPainter *painter)
 {
+    // Kitty animations: move to the due frame before the render state is
+    // read, and wake for the next one. This is the render thread, so the
+    // timer is started on the item's own.
+    GhosttyKittyGraphics graphics = nullptr;
+    uint64_t next = 0;
+    const uint64_t now = uint64_t(m_clock.elapsed());
+    if (ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS, &graphics) == GHOSTTY_SUCCESS
+        && graphics && ghostty_kitty_graphics_animation_tick(graphics, now, &next) == GHOSTTY_SUCCESS) {
+        const int wait = int(qBound<uint64_t>(8, next > now ? next - now : 0, 60000));
+        QMetaObject::invokeMethod(this, [this, wait] { m_animationTimer.start(wait); }, Qt::QueuedConnection);
+    }
     if (ghostty_render_state_update(m_renderState, m_terminal) != GHOSTTY_SUCCESS)
         return;
     GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
