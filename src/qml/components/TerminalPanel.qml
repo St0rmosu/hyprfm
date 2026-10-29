@@ -59,6 +59,137 @@ Item {
         onUnsafePaste: (text) => panel.unsafePaste(text)
         onLinkActivated: (url) => panel.linkActivated(url)
         onFolderActivated: (path) => panel.folderActivated(path)
+        matchColor: Theme.warning
+        onSearchRequested: panel.openFind()
+    }
+
+    function openFind() {
+        findBar.visible = true
+        findInput.selectAll()
+        findInput.forceActiveFocus()
+    }
+
+    function closeFind() {
+        findBar.visible = false
+        view.searchText = ""
+        view.forceActiveFocus()
+    }
+
+    // Ctrl+Shift+F in the terminal. Enter goes up to older matches,
+    // Shift+Enter back down, Escape closes and clears the highlights.
+    Rectangle {
+        id: findBar
+        objectName: "terminalFindBar"
+        visible: false
+        anchors { right: parent.right; top: parent.top; margins: 6; topMargin: 7 }
+        width: Math.min(340, parent.width - 12)
+        height: 32
+        radius: Theme.radiusSmall
+        color: Theme.mantle
+        border.color: findInput.activeFocus ? Theme.accent : Theme.overlay
+
+        IconSearch {
+            id: findIcon
+            anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }
+            size: 14
+            color: Theme.muted
+        }
+
+        TextInput {
+            id: findInput
+            objectName: "terminalFindInput"
+            anchors {
+                left: findIcon.right; leftMargin: 7
+                right: findCount.left; rightMargin: 8
+                verticalCenter: parent.verticalCenter
+            }
+            clip: true
+            color: Theme.text
+            selectionColor: Theme.accent
+            selectedTextColor: Theme.base
+            font.pointSize: Theme.baseFontSize
+            onTextEdited: view.searchText = text
+            Keys.onPressed: (event) => {
+                if (event.key === Qt.Key_Escape) {
+                    panel.closeFind()
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    if (event.modifiers & Qt.ShiftModifier)
+                        view.findPrevious()
+                    else
+                        view.findNext()
+                    event.accepted = true
+                }
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !findInput.text
+                text: "Find in terminal"
+                color: Theme.muted
+                font: findInput.font
+            }
+        }
+
+        Text {
+            id: findCount
+            anchors { right: findButtons.left; rightMargin: 4; verticalCenter: parent.verticalCenter }
+            text: !findInput.text ? ""
+                : view.searchMatchCount === 0 ? "No matches"
+                : view.searchMatchIndex + " of " + view.searchMatchCount
+            color: findInput.text && view.searchMatchCount === 0 ? Theme.error : Theme.subtext
+            font.pointSize: Theme.baseFontSize - 1
+        }
+
+        Row {
+            id: findButtons
+            anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter }
+            spacing: 0
+
+            Repeater {
+                model: [
+                    { icon: "up", tip: "Older match (Enter)" },
+                    { icon: "down", tip: "Newer match (Shift+Enter)" },
+                    { icon: "close", tip: "Close (Escape)" }
+                ]
+                delegate: Rectangle {
+                    required property var modelData
+                    width: 24; height: 24
+                    radius: Theme.radiusSmall
+                    color: findButtonMouse.containsMouse
+                        ? Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.1) : "transparent"
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.tip
+
+                    IconChevronUp {
+                        visible: modelData.icon === "up"
+                        anchors.centerIn: parent; size: 14; color: Theme.text
+                    }
+                    IconChevronDown {
+                        visible: modelData.icon === "down"
+                        anchors.centerIn: parent; size: 14; color: Theme.text
+                    }
+                    IconX {
+                        visible: modelData.icon === "close"
+                        anchors.centerIn: parent; size: 14; color: Theme.text
+                    }
+
+                    MouseArea {
+                        id: findButtonMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            if (modelData.icon === "up")
+                                view.findNext()
+                            else if (modelData.icon === "down")
+                                view.findPrevious()
+                            else
+                                panel.closeFind()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Where the link under the mouse really goes, as a browser shows it:

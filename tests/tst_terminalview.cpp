@@ -687,6 +687,45 @@ private slots:
         QCOMPARE(folder.count(), 0);
     }
 
+    // Find covers the scrollback, ignores ASCII case, steps from the newest
+    // match up into older output and wraps both ways, and tints matches.
+    void testSearchScrollback()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setBackground(Qt::black);
+        view.setProperty("matchColor", QColor(0, 255, 0));
+        view.start();
+        // Rows 5, 20 and 38 of 40 say "needle"; the typed command must not,
+        // so the word is put together by the shell.
+        view.sendText(QStringLiteral("clear; n=nee; for i in $(seq 1 40); do case $i in 5|20|38) echo \"row $i ${n}dle\";; *) echo \"row $i\";; esac; done; sleep 5\n"));
+        QTest::qWait(800);
+        QSignalSpy changed(&view, &TerminalView::searchChanged);
+        view.setSearchText(QStringLiteral("NEEDLE"));
+        QCOMPARE(view.searchMatchCount(), 3);
+        QCOMPARE(view.searchMatchIndex(), 1);   // the newest, row 38
+        QVERIFY(changed.count() > 0);
+        const auto green = [](QColor c) { return c.green() > 100 && c.red() < 60 && c.blue() < 60; };
+        QVERIFY(countPixels(render(view), green) > 20);
+
+        view.findNext();   // row 20, in the scrollback: the view scrolls to it
+        QCOMPARE(view.searchMatchIndex(), 2);
+        QVERIFY(countPixels(render(view), green) > 20);
+        view.findNext();
+        QCOMPARE(view.searchMatchIndex(), 3);
+        view.findNext();   // wraps to the newest
+        QCOMPARE(view.searchMatchIndex(), 1);
+        view.findPrevious();   // and back the other way
+        QCOMPARE(view.searchMatchIndex(), 3);
+
+        view.setSearchText(QStringLiteral("no such text"));
+        QCOMPARE(view.searchMatchCount(), 0);
+        QCOMPARE(view.searchMatchIndex(), 0);
+        view.setSearchText(QString());
+        QCOMPARE(view.searchMatchCount(), 0);
+        QCOMPARE(countPixels(render(view), green), 0);
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;

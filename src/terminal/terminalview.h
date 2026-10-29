@@ -53,6 +53,13 @@ class TerminalView : public QQuickPaintedItem
     // Where the link under the mouse goes (an OSC 8 link's real target, not
     // its text), empty when there is none. Ctrl+click opens it.
     Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged)
+    // Find in the screen and scrollback (ASCII letters match either case).
+    // Matches are highlighted in matchColor; the current one is stronger.
+    Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchChanged)
+    // Matches found, and which is current: 1 is the newest, 0 is none.
+    Q_PROPERTY(int searchMatchCount READ searchMatchCount NOTIFY searchChanged)
+    Q_PROPERTY(int searchMatchIndex READ searchMatchIndex NOTIFY searchChanged)
+    Q_PROPERTY(QColor matchColor MEMBER m_matchColor NOTIFY colorsChanged)
 
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
@@ -63,6 +70,10 @@ public:
     QString shellDirectory() const { return m_shellDirectory; }
     QString title() const { return m_title; }
     QString hoveredLink() const { return m_hoverLink.uri; }
+    QString searchText() const { return m_searchText; }
+    void setSearchText(const QString &text);
+    int searchMatchCount() const { return m_searchCount; }
+    int searchMatchIndex() const { return m_searchIndex; }
     bool running() const { return m_ptyFd >= 0; }
     QFont font() const { return m_font; }
     void setFont(const QFont &font);
@@ -102,6 +113,9 @@ public:
     // off) emits unsafePaste instead; pasteText(text) then pastes it anyway.
     Q_INVOKABLE void paste(bool primarySelection = false);
     Q_INVOKABLE void pasteText(const QString &text);
+    // The next match up into older output, and back down; both wrap.
+    Q_INVOKABLE void findNext();
+    Q_INVOKABLE void findPrevious();
 
     void paint(QPainter *painter) override;
 
@@ -122,6 +136,9 @@ signals:
     // capped, at most one a second.
     void notification(const QString &title, const QString &body);
     void hoveredLinkChanged();
+    void searchChanged();
+    // Ctrl+Shift+F: the panel shows its find bar.
+    void searchRequested();
     // Ctrl+click on a web or mail link (http, https, ftp, mailto).
     void linkActivated(const QString &url);
     // Ctrl+click on a file:// link to this machine: the folder it names, or
@@ -170,6 +187,8 @@ private:
     Link linkAt(QPointF pos) const;
     void updateHoverLink();
     bool activateLink(const QString &uri);
+    void refreshSearch();
+    void paintSearchMatches(QPainter *painter);
     bool selectionGesture(GhosttySelectionGestureEvent event, QMouseEvent *mouse);
     void clearSelection();
     bool reportMouse(GhosttyMouseAction action, GhosttyMouseButton button, QPointF pos,
@@ -211,6 +230,14 @@ private:
     QStringList m_windowShortcuts;
     bool m_desktopNotifications = true;
     Link m_hoverLink;
+    GhosttySearch m_search = nullptr;
+    QString m_searchText;
+    int m_searchCount = 0;
+    int m_searchIndex = 0;
+    QColor m_matchColor = QColor(0xf9, 0xe2, 0xaf);
+    // Output and scrolling move matches; the count and highlights catch up
+    // once per frame, not once per pty read.
+    QTimer m_searchRefresh;
     QPointF m_hoverPos{-1, -1};
     QElapsedTimer m_lastNotification;
     QFont m_font;

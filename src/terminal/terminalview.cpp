@@ -255,6 +255,9 @@ TerminalView::TerminalView(QQuickItem *parent)
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES, &clipboardLimit);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION,
                          reinterpret_cast<const void *>(&TerminalView::onDesktopNotification));
+    m_searchRefresh.setSingleShot(true);
+    m_searchRefresh.setInterval(16);
+    connect(&m_searchRefresh, &QTimer::timeout, this, &TerminalView::refreshSearch);
     m_bellTimer.setSingleShot(true);
     m_bellTimer.setInterval(120);
     connect(&m_bellTimer, &QTimer::timeout, this, [this] { update(); });
@@ -264,6 +267,7 @@ TerminalView::TerminalView(QQuickItem *parent)
 TerminalView::~TerminalView()
 {
     stop();
+    ghostty_search_free(m_search);
     ghostty_mouse_event_free(m_mouseEvent);
     ghostty_mouse_encoder_free(m_mouseEncoder);
     ghostty_selection_gesture_event_free(m_releaseEvent);
@@ -594,6 +598,8 @@ void TerminalView::readPty()
     // New output may have written over (or written) the link under the mouse.
     if (m_hoverPos.x() >= 0)
         updateHoverLink();
+    if (!m_searchText.isEmpty() && !m_searchRefresh.isActive())
+        m_searchRefresh.start();
     update();
 }
 
@@ -848,6 +854,11 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     const QKeyCombination combo = event->keyCombination();
     if (combo == QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_C)) {
         copy();
+        event->accept();
+        return;
+    }
+    if (combo == QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_F)) {
+        Q_EMIT searchRequested();
         event->accept();
         return;
     }
@@ -1333,8 +1344,115 @@ void TerminalView::wheelEvent(QWheelEvent *event)
     scroll.value.delta = -lines;
     ghostty_terminal_scroll_viewport(m_terminal, scroll);
     updateHoverLink();
+    if (!m_searchText.isEmpty())
+        refreshSearch();   // the highlights follow the viewport
     update();
     event->accept();
+}
+
+void TerminalView::setSearchText(const QString &text)
+{
+    if (m_searchText == text)
+        return;
+    m_searchText = text;
+    if (!m_search && !text.isEmpty())
+        ghostty_search_new(nullptr, &m_search, m_terminal);
+    if (m_search) {
+        const QByteArray needle = text.toUtf8();
+        const GhosttyString value{reinterpret_cast<const uint8_t *>(needle.constData()), size_t(needle.size())};
+        ghostty_search_set(m_search, GHOSTTY_SEARCH_OPT_NEEDLE, text.isEmpty() ? nullptr : &value);
+        // Typing jumps to the newest match, scrolling to it if needed.
+        if (!text.isEmpty()) {
+            ghostty_search_run(m_search);
+            ghostty_search_set(m_search, GHOSTTY_SEARCH_OPT_SELECT_NEXT, nullptr);
+        }
+    }
+    refreshSearch();
+    Q_EMIT searchChanged();
+}
+
+void TerminalView::findNext()
+{
+    if (!m_search || m_searchText.isEmpty())
+        return;
+    ghostty_search_set(m_search, GHOSTTY_SEARCH_OPT_SELECT_NEXT, nullptr);
+    refreshSearch();
+}
+
+void TerminalView::findPrevious()
+{
+    if (!m_search || m_searchText.isEmpty())
+        return;
+    ghostty_search_set(m_search, GHOSTTY_SEARCH_OPT_SELECT_PREV, nullptr);
+    refreshSearch();
+}
+
+// Catches the search up with the terminal (new output, scrolling) and
+// publishes the count and position for the find bar.
+void TerminalView::refreshSearch()
+{
+    int count = 0, index = 0;
+    if (m_search && !m_searchText.isEmpty()) {
+        ghostty_search_run(m_search);
+        size_t total = 0, selected = 0;
+        ghostty_search_get(m_search, GHOSTTY_SEARCH_DATA_TOTAL_MATCHES, &total);
+        if (ghostty_search_get(m_search, GHOSTTY_SEARCH_DATA_SELECTED_INDEX, &selected) == GHOSTTY_SUCCESS)
+            index = int(selected) + 1;
+        count = int(total);
+    }
+    update();
+    if (count == m_searchCount && index == m_searchIndex)
+        return;
+    m_searchCount = count;
+    m_searchIndex = index;
+    Q_EMIT searchChanged();
+}
+
+// Tints every match in view, the current one more strongly. Runs inside
+// paint(), after the text, so the tint lies over it.
+void TerminalView::paintSearchMatches(QPainter *painter)
+{
+    if (!m_search || m_searchText.isEmpty())
+        return;
+    QVarLengthArray<GhosttySelection, 64> matches(64);
+    GhosttySelectionBuffer buffer{matches.data(), size_t(matches.size()), 0};
+    GhosttyResult result = ghostty_search_get(m_search, GHOSTTY_SEARCH_DATA_VIEWPORT_MATCHES, &buffer);
+    if (result == GHOSTTY_OUT_OF_SPACE) {
+        matches.resize(qsizetype(buffer.len));
+        buffer = GhosttySelectionBuffer{matches.data(), size_t(matches.size()), 0};
+        result = ghostty_search_get(m_search, GHOSTTY_SEARCH_DATA_VIEWPORT_MATCHES, &buffer);
+    }
+    if (result != GHOSTTY_SUCCESS)
+        return;
+
+    GhosttyPointCoordinate selectedStart{UINT16_MAX, UINT32_MAX};
+    GhosttySelection selected = GHOSTTY_INIT_SIZED(GhosttySelection);
+    if (ghostty_search_get(m_search, GHOSTTY_SEARCH_DATA_SELECTED_MATCH, &selected) == GHOSTTY_SUCCESS)
+        ghostty_terminal_point_from_grid_ref(m_terminal, &selected.start, GHOSTTY_POINT_TAG_VIEWPORT,
+                                             &selectedStart);
+    QColor other = m_matchColor;
+    other.setAlphaF(0.3);
+    QColor current = m_matchColor;
+    current.setAlphaF(0.65);
+    for (size_t i = 0; i < buffer.len; ++i) {
+        GhosttyPointCoordinate start{}, end{};
+        // Matches on the viewport's pages but outside the view fail here.
+        if (ghostty_terminal_point_from_grid_ref(m_terminal, &matches[qsizetype(i)].start,
+                                                 GHOSTTY_POINT_TAG_VIEWPORT, &start) != GHOSTTY_SUCCESS
+            || ghostty_terminal_point_from_grid_ref(m_terminal, &matches[qsizetype(i)].end,
+                                                    GHOSTTY_POINT_TAG_VIEWPORT, &end) != GHOSTTY_SUCCESS
+            || start.y >= m_rowCount || end.y >= m_rowCount)
+            continue;
+        const bool isCurrent = start.x == selectedStart.x && start.y == selectedStart.y;
+        // A match can wrap onto following rows.
+        for (uint32_t row = start.y; row <= end.y; ++row) {
+            const int from = row == start.y ? start.x : 0;
+            const int to = row == end.y ? end.x : m_cols - 1;
+            painter->fillRect(QRectF(Padding + from * m_cellWidth, Padding + row * m_cellHeight,
+                                     (to - from + 1) * m_cellWidth, m_cellHeight),
+                              isCurrent ? current : other);
+        }
+    }
 }
 
 void TerminalView::paint(QPainter *painter)
@@ -1478,6 +1596,8 @@ void TerminalView::paint(QPainter *painter)
         flush();
         y += m_cellHeight;
     }
+
+    paintSearchMatches(painter);
 
     if (m_hoverLink.row >= 0) {
         const qreal lineY = Padding + m_hoverLink.row * m_cellHeight + m_ascent + thickness;
