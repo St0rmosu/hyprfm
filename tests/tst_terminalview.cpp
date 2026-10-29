@@ -1,5 +1,6 @@
 #include <QTest>
 #include <functional>
+#include <csignal>
 #include <QFile>
 #include <QWheelEvent>
 #include <QClipboard>
@@ -635,6 +636,27 @@ private slots:
         ctrlClick(view, cellCentre(view, 2, 0));
         QCOMPARE(opened.count(), 1);
         QCOMPARE(opened.at(0).at(0).toString(), QStringLiteral("https://example.com/real"));
+    }
+
+    // HyprFM started from `hyprfm &` in a script ignores SIGINT; its shells
+    // must not, or Ctrl+C never stops anything.
+    void testShellGetsDefaultSignals()
+    {
+        QTemporaryDir dir;
+        const QString out = dir.filePath(QStringLiteral("sigign"));
+        struct sigaction ignore{}, old{};
+        ignore.sa_handler = SIG_IGN;
+        sigaction(SIGINT, &ignore, &old);
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.start();
+        sigaction(SIGINT, &old, nullptr);
+        view.sendText(QStringLiteral("grep SigIgn /proc/self/status > %1\n").arg(out));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(out).size() > 0, 5000);
+        QFile file(out);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const quint64 ignored = file.readAll().split('\t').last().trimmed().toULongLong(nullptr, 16);
+        QCOMPARE(ignored & (1u << (SIGINT - 1)), 0u);
     }
 
     // A URL written out in the text is a link too, without the sentence

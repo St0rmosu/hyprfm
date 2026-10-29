@@ -600,13 +600,15 @@ void TerminalView::start()
     if (pid == 0) {
         // Child: only async-signal-safe calls from here to exec. Nothing of
         // HyprFM's (its IPC socket, D-Bus, inotify) may leak into the shell,
-        // and the shell must start with default signal handling.
+        // and the shell must start with default signal handling: HyprFM
+        // started by `hyprfm &` from a script ignores SIGINT and SIGQUIT,
+        // and a shell that inherits that can never Ctrl+C its programs.
         closefrom(3);
         sigset_t none;
         sigemptyset(&none);
         sigprocmask(SIG_SETMASK, &none, nullptr);
-        signal(SIGPIPE, SIG_DFL);
-        signal(SIGCHLD, SIG_DFL);
+        for (int sig = 1; sig < NSIG; ++sig)
+            signal(sig, SIG_DFL);
         if (!dir.isEmpty() && chdir(dir.constData()) != 0)
             (void)chdir("/");
         setenv("TERM", "xterm-256color", 1);
