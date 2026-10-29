@@ -123,6 +123,18 @@ private slots:
         QCOMPARE(QFileInfo(view.shellDirectory()).canonicalFilePath(), QFileInfo(dir.path()).canonicalFilePath());
     }
 
+    // A shell that never sends OSC 7 still reports where it went.
+    void testShellDirectoryWithoutOsc7()
+    {
+        QTemporaryDir dir;
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.start();
+        view.sendText(QStringLiteral("cd '%1'\n").arg(dir.path()));
+        QTRY_COMPARE_WITH_TIMEOUT(QFileInfo(view.shellDirectory()).canonicalFilePath(),
+                                  QFileInfo(dir.path()).canonicalFilePath(), 5000);
+    }
+
     // What the shell prints is painted: a line of X in red shows up in the image.
     void testOutputIsPainted()
     {

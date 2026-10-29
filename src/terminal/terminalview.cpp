@@ -319,6 +319,18 @@ TerminalView::TerminalView(QQuickItem *parent)
     m_searchRefresh.setSingleShot(true);
     m_searchRefresh.setInterval(16);
     connect(&m_searchRefresh, &QTimer::timeout, this, &TerminalView::refreshSearch);
+    // Shells that do not report their folder (OSC 7: plain bash and zsh)
+    // still get the right tab title: after output settles, the folder is
+    // read from /proc, which is where a cd shows up.
+    m_directoryRefresh.setSingleShot(true);
+    m_directoryRefresh.setInterval(300);
+    connect(&m_directoryRefresh, &QTimer::timeout, this, [this] {
+        const QString dir = currentDirectory();
+        if (!m_shellReportsDirectory && dir != m_shellDirectory) {
+            m_shellDirectory = dir;
+            Q_EMIT shellDirectoryChanged();
+        }
+    });
     m_bellTimer.setSingleShot(true);
     m_bellTimer.setInterval(120);
     connect(&m_bellTimer, &QTimer::timeout, this, [this] { update(); });
@@ -720,6 +732,8 @@ void TerminalView::readPty()
         updateHoverLink();
     if (!m_searchText.isEmpty() && !m_searchRefresh.isActive())
         m_searchRefresh.start();
+    if (!m_shellReportsDirectory && !m_directoryRefresh.isActive())
+        m_directoryRefresh.start();
     updateScrollbar();
     update();
 }
@@ -794,6 +808,7 @@ void TerminalView::onPwdChanged(GhosttyTerminal terminal, void *self)
     // turn into a //host UNC path, so only the path is kept.
     const QString pwd = ghosttyString(terminal, GHOSTTY_TERMINAL_DATA_PWD);
     const QUrl url(pwd);
+    view->m_shellReportsDirectory = true;
     view->m_shellDirectory = url.isLocalFile() ? url.path(QUrl::FullyDecoded) : pwd;
     Q_EMIT view->shellDirectoryChanged();
 }

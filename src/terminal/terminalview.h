@@ -280,6 +280,8 @@ private:
     // Output and scrolling move matches; the count and highlights catch up
     // once per frame, not once per pty read.
     QTimer m_searchRefresh;
+    QTimer m_directoryRefresh;
+    bool m_shellReportsDirectory = false;
     QPointF m_hoverPos{-1, -1};
     QElapsedTimer m_lastNotification;
     QFont m_font;
