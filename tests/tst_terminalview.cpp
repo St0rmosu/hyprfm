@@ -834,6 +834,33 @@ private slots:
         QCOMPARE(countPixels(image, isBlue), 0);
     }
 
+    // A new tab opens where the shell is, which bash only tells /proc.
+    void testCurrentDirectoryAndTabKeys()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setWorkingDirectory(QDir::homePath());
+        view.start();
+        QTRY_COMPARE_WITH_TIMEOUT(view.currentDirectory(), QDir::homePath(), 5000);
+        view.sendText(QStringLiteral("cd /usr\n"));
+        QTRY_COMPARE_WITH_TIMEOUT(view.currentDirectory(), QStringLiteral("/usr"), 5000);
+
+        QSignalSpy newTab(&view, &TerminalView::newTabRequested);
+        QSignalSpy closeTab(&view, &TerminalView::closeTabRequested);
+        QSignalSpy switchTab(&view, &TerminalView::switchTabRequested);
+        auto press = [&](int key, Qt::KeyboardModifiers mods) {
+            QKeyEvent event(QEvent::KeyPress, key, mods);
+            QCoreApplication::sendEvent(&view, &event);
+        };
+        press(Qt::Key_T, Qt::ControlModifier | Qt::ShiftModifier);
+        press(Qt::Key_W, Qt::ControlModifier | Qt::ShiftModifier);
+        press(Qt::Key_PageUp, Qt::ControlModifier);
+        QCOMPARE(newTab.count(), 1);
+        QCOMPARE(closeTab.count(), 1);
+        QCOMPARE(switchTab.count(), 1);
+        QCOMPARE(switchTab.at(0).at(0).toInt(), -1);
+    }
+
     // History past scrollbackLines is dropped (by whole pages, so loosely).
     void testScrollbackLimit()
     {

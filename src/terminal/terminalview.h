@@ -77,6 +77,9 @@ public:
     QString workingDirectory() const { return m_workingDirectory; }
     void setWorkingDirectory(const QString &dir);
     QString shellDirectory() const { return m_shellDirectory; }
+    // Where the shell is now: its OSC 7 report, else its cwd from /proc
+    // (bash says nothing by default), else where it started.
+    Q_INVOKABLE QString currentDirectory() const;
     QString title() const { return m_title; }
     QString hoveredLink() const { return m_hoverLink.uri; }
     QString searchText() const { return m_searchText; }
@@ -157,6 +160,11 @@ signals:
     void scrollChanged();
     // Ctrl+Shift+F: the panel shows its find bar.
     void searchRequested();
+    // Tab keys, for the panel: Ctrl+Shift+T, Ctrl+Shift+W, and
+    // Ctrl+PageDown / Ctrl+PageUp (step 1 / -1).
+    void newTabRequested();
+    void closeTabRequested();
+    void switchTabRequested(int step);
     // Ctrl+click on a web or mail link (http, https, ftp, mailto).
     void linkActivated(const QString &url);
     // Ctrl+click on a file:// link to this machine: the folder it names, or

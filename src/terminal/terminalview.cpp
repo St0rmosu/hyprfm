@@ -617,6 +617,18 @@ void TerminalView::start()
     Q_EMIT runningChanged();
 }
 
+QString TerminalView::currentDirectory() const
+{
+    if (!m_shellDirectory.isEmpty())
+        return m_shellDirectory;
+    if (m_pid > 0) {
+        const QString cwd = QFileInfo(QStringLiteral("/proc/%1/cwd").arg(m_pid)).symLinkTarget();
+        if (!cwd.isEmpty())
+            return cwd;
+    }
+    return m_workingDirectory;
+}
+
 void TerminalView::stop()
 {
     if (m_ptyFd < 0)
@@ -934,6 +946,22 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
     }
     if (combo == QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_F)) {
         Q_EMIT searchRequested();
+        event->accept();
+        return;
+    }
+    if (combo == QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_T)) {
+        Q_EMIT newTabRequested();
+        event->accept();
+        return;
+    }
+    if (combo == QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_W)) {
+        Q_EMIT closeTabRequested();
+        event->accept();
+        return;
+    }
+    if (combo == QKeyCombination(Qt::ControlModifier, Qt::Key_PageDown)
+        || combo == QKeyCombination(Qt::ControlModifier, Qt::Key_PageUp)) {
+        Q_EMIT switchTabRequested(event->key() == Qt::Key_PageDown ? 1 : -1);
         event->accept();
         return;
     }
