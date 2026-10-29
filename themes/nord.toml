@@ -11,3 +11,10 @@ accent = "#88c0d0"
 success = "#a3be8c"
 warning = "#ebcb8b"
 error = "#bf616a"
+
+[terminal]
+# ANSI colours 0-15 of the built-in terminal, from the Nord scheme.
+palette = [
+    "#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
+    "#596377", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
+]

@@ -4,6 +4,7 @@
 #include <QMap>
 #include <QDateTime>
 #include <QFileSystemWatcher>
+#include <QVariantList>
 
 class ThemeLoader : public QObject
 {
@@ -20,6 +21,9 @@ class ThemeLoader : public QObject
     Q_PROPERTY(QColor success READ success NOTIFY themeChanged)
     Q_PROPERTY(QColor warning READ warning NOTIFY themeChanged)
     Q_PROPERTY(QColor error READ error NOTIFY themeChanged)
+    // The theme's 16 ANSI colours for the built-in terminal, empty when the
+    // theme has none (the terminal keeps its default palette then).
+    Q_PROPERTY(QVariantList terminalPalette READ terminalPalette NOTIFY themeChanged)
 
 public:
     explicit ThemeLoader(QObject *parent = nullptr);
@@ -37,6 +41,7 @@ public:
     QColor success() const { return color("success"); }
     QColor warning() const { return color("warning"); }
     QColor error() const { return color("error"); }
+    QVariantList terminalPalette() const { return m_terminalPalette; }
 signals:
     void themeChanged();
 private:
@@ -44,6 +49,7 @@ private:
     void watchThemeFile(const QString &filePath);
 
     QMap<QString, QColor> m_colors;
+    QVariantList m_terminalPalette;
     QFileSystemWatcher m_watcher;
     QString m_watchedPath;
     QDateTime m_watchedModified;

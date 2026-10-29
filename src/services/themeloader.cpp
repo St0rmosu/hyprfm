@@ -57,6 +57,7 @@ void ThemeLoader::watchThemeFile(const QString &filePath)
 void ThemeLoader::applyThemeFile(const QString &filePath)
 {
     m_colors = s_defaults;
+    m_terminalPalette.clear();
     try {
         auto config = toml::parse_file(filePath.toStdString());
         if (auto colors = config["colors"].as_table()) {
@@ -68,6 +69,20 @@ void ThemeLoader::applyThemeFile(const QString &filePath)
                         m_colors[QString::fromStdString(std::string(key))] = c;
                 }
             }
+        }
+        // All 16 or none: half a palette mixed with the defaults would clash.
+        if (auto palette = config["terminal"]["palette"].as_array(); palette && palette->size() == 16) {
+            QVariantList colors;
+            for (const auto &entry : *palette) {
+                const QColor c(QString::fromStdString(entry.value_or(std::string())));
+                if (!c.isValid())
+                    break;
+                colors.append(c);
+            }
+            if (colors.size() == 16)
+                m_terminalPalette = colors;
+            else
+                qWarning() << "Theme" << filePath << "has an invalid terminal palette";
         }
     } catch (const toml::parse_error &err) {
         qWarning() << "Theme parse error:" << err.what();
@@ -95,6 +110,7 @@ void ThemeLoader::loadTheme(const QString &nameOrPath, const QStringList &themes
     if (filePath.isEmpty() || !QFile::exists(filePath)) {
         qWarning() << "Theme not found:" << nameOrPath;
         m_colors = s_defaults;
+        m_terminalPalette.clear();
         emit themeChanged();
         return;
     }

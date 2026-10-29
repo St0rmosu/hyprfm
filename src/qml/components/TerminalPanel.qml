@@ -46,6 +46,7 @@ Item {
         foreground: Theme.text
         // Same translucency as the file view, so Hyprland blurs behind it.
         background: Theme.containerColor(Theme.base, 0.65)
+        ansiPalette: Theme.terminalPalette
         fontFamily: config.terminalFontFamily
         fontSize: config.terminalFontSize
         ligatures: config.terminalLigatures

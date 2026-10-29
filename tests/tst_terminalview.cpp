@@ -1,4 +1,5 @@
 #include <QTest>
+#include <functional>
 #include <QFile>
 #include <QWheelEvent>
 #include <QClipboard>
@@ -51,6 +52,23 @@ class TestTerminalView : public QObject
                           buttons, Qt::NoModifier);
         event.setTimestamp(time);
         QCoreApplication::sendEvent(&view, &event);
+    }
+
+    static QImage render(TerminalView &view)
+    {
+        QImage image(view.size().toSize(), QImage::Format_RGB32);
+        QPainter painter(&image);
+        view.paint(&painter);
+        return image;
+    }
+
+    static int countPixels(const QImage &image, const std::function<bool(QColor)> &match)
+    {
+        int n = 0;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x)
+                n += match(image.pixelColor(x, y));
+        return n;
     }
 
     // A view with "hello world" on its top row and nothing else.
@@ -397,6 +415,27 @@ private slots:
         QVERIFY(litAt(6 + 1));
         QTest::qWait(QGuiApplication::styleHints()->cursorFlashTime());
         QVERIFY(litAt(6 + 1));
+    }
+
+    // The theme's palette replaces the ANSI colours: red (colour 1) set to
+    // pure green paints green.
+    void testThemePaletteColoursAnsiText()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setBackground(Qt::black);
+        QVariantList palette;
+        for (int i = 0; i < 16; ++i)
+            palette.append(i == 1 ? QColor(0, 255, 0) : QColor(Qt::gray));
+        view.setAnsiPalette(palette);
+        view.start();
+        view.sendText(QStringLiteral("clear; printf '\\033[31mXXXXXXXXXXXXXXXXXXXX\\033[0m\\n'\n"));
+        const auto green = [](QColor c) { return c.green() > 150 && c.red() < 100 && c.blue() < 100; };
+        QTRY_VERIFY_WITH_TIMEOUT(countPixels(render(view), green) > 50, 5000);
+
+        // A palette of the wrong size is ignored: back to Ghostty's red.
+        view.setAnsiPalette({});
+        QCOMPARE(countPixels(render(view), green), 0);
     }
 
     void testExitEndsTheSession()

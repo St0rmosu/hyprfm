@@ -5,6 +5,7 @@
 #include <QQuickPaintedItem>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantList>
 
 // Ghostty names a struct field `emit`, which Qt defines away as a macro.
 #pragma push_macro("emit")
@@ -40,6 +41,8 @@ class TerminalView : public QQuickPaintedItem
     Q_PROPERTY(bool cursorBlink READ cursorBlink WRITE setCursorBlink NOTIFY cursorStyleChanged)
     Q_PROPERTY(QColor foreground READ foreground WRITE setForeground NOTIFY colorsChanged)
     Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY colorsChanged)
+    // ANSI colours 0-15; anything but 16 colours keeps Ghostty's defaults.
+    Q_PROPERTY(QVariantList ansiPalette READ ansiPalette WRITE setAnsiPalette NOTIFY colorsChanged)
     // Shortcuts the window keeps while the terminal has focus (the panel
     // toggle, say); every other key goes to the shell, Ctrl+C included.
     Q_PROPERTY(QStringList windowShortcuts MEMBER m_windowShortcuts)
@@ -72,6 +75,8 @@ public:
     void setForeground(const QColor &color);
     QColor background() const { return m_background; }
     void setBackground(const QColor &color);
+    QVariantList ansiPalette() const { return m_palette; }
+    void setAnsiPalette(const QVariantList &palette);
 
     // Starts the shell if it is not running.
     Q_INVOKABLE void start();
@@ -174,6 +179,7 @@ private:
     QFont m_cellFonts[4];
     QColor m_foreground = QColor(0xcd, 0xd6, 0xf4);
     QColor m_background = QColor(0x1e, 0x1e, 0x2e);
+    QVariantList m_palette;
     qreal m_cellWidth = 8;
     qreal m_cellHeight = 16;
     qreal m_ascent = 12;

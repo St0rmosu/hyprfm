@@ -326,12 +326,32 @@ void TerminalView::setBackground(const QColor &color)
     Q_EMIT colorsChanged();
 }
 
+void TerminalView::setAnsiPalette(const QVariantList &palette)
+{
+    if (m_palette == palette)
+        return;
+    m_palette = palette;
+    applyColors();
+    Q_EMIT colorsChanged();
+}
+
 void TerminalView::applyColors()
 {
     const GhosttyColorRgb fg = rgb(m_foreground);
     const GhosttyColorRgb bg = rgb(m_background);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &fg);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &bg);
+    // The theme sets the 16 ANSI colours; the 256-colour cube and grey ramp
+    // above them stay Ghostty's. Colours a program set itself (OSC 4) win.
+    if (m_palette.size() == 16) {
+        GhosttyColorRgb palette[256];
+        ghostty_color_palette_default(palette);
+        for (int i = 0; i < 16; ++i)
+            palette[i] = rgb(m_palette.at(i).value<QColor>());
+        ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette);
+    } else {
+        ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, nullptr);
+    }
     // A translucent background lets the compositor's blur show through;
     // paint() fills with it, so the item's own fill stays clear.
     setOpaquePainting(m_background.alpha() == 255);

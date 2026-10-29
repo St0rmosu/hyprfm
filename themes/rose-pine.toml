@@ -11,3 +11,10 @@ accent = "#ebbcba"
 success = "#9ccfd8"
 warning = "#f6c177"
 error = "#eb6f92"
+
+[terminal]
+# ANSI colours 0-15 of the built-in terminal, from the Rose Pine scheme.
+palette = [
+    "#26233a", "#eb6f92", "#31748f", "#f6c177", "#9ccfd8", "#c4a7e7", "#ebbcba", "#e0def4",
+    "#6e6a86", "#eb6f92", "#31748f", "#f6c177", "#9ccfd8", "#c4a7e7", "#ebbcba", "#e0def4",
+]
