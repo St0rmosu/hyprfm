@@ -201,6 +201,7 @@ Rectangle {
 
                     HoverRect {
                         width: 24; height: 24
+                        tooltip: paused ? "Resume" : "Pause"
                         onClicked: paused
                             ? fileOps.resumeTransfer(transferId)
                             : fileOps.pauseTransfer(transferId)
@@ -213,6 +214,7 @@ Rectangle {
 
                     HoverRect {
                         width: 24; height: 24
+                        tooltip: "Cancel"
                         onClicked: fileOps.cancelTransfer(transferId)
 
                         IconX {

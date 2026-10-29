@@ -604,6 +604,8 @@ Item {
                             color: Theme.text
                         }
 
+                        ShortcutTip { text: "Previous page"; keys: "Up"; shown: pdfPrevMouse.containsMouse }
+
                         MouseArea {
                             id: pdfPrevMouse
                             anchors.fill: parent
@@ -628,6 +630,8 @@ Item {
                             size: 16
                             color: Theme.text
                         }
+
+                        ShortcutTip { text: "Next page"; keys: "Down"; shown: pdfNextMouse.containsMouse }
 
                         MouseArea {
                             id: pdfNextMouse
@@ -657,6 +661,8 @@ Item {
                             color: Theme.text
                         }
 
+                        ShortcutTip { text: "Previous file"; keys: "Left"; shown: prevMouse.containsMouse }
+
                         MouseArea {
                             id: prevMouse
                             anchors.fill: parent
@@ -678,6 +684,8 @@ Item {
                             size: 16
                             color: Theme.text
                         }
+
+                        ShortcutTip { text: "Next file"; keys: "Right"; shown: nextMouse.containsMouse }
 
                         MouseArea {
                             id: nextMouse
@@ -701,6 +709,8 @@ Item {
                         size: 16
                         color: Theme.error
                     }
+
+                    ShortcutTip { text: "Close"; keys: "Esc"; shown: closeMouse.containsMouse }
 
                     MouseArea {
                         id: closeMouse

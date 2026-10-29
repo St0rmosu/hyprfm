@@ -299,6 +299,26 @@ private slots:
         QVERIFY(breadcrumb->property("editMode").toBool());
     }
 
+    // Hovering a toolbar button names it and its shortcut (#63), and the
+    // chip has a real size: Quill's Tooltip once rendered 0x0 with no
+    // background.
+    void testToolbarTooltipShowsShortcut()
+    {
+        App app;
+        QVERIFY(app.load());
+        QQuickItem *grid = app.item(QStringLiteral("viewModeButton_grid"));
+        QVERIFY(grid);
+        QTest::mouseMove(app.window, app.center(grid));
+        auto *config = app.engine.rootContext()->contextProperty("config").value<QObject *>();
+        const QString keys = config->property("shortcutMap").toMap().value("grid_view").toString();
+        QVERIFY(!keys.isEmpty());
+        const QString text = QStringLiteral("Grid view  (") + keys + ")";
+        QTRY_VERIFY_WITH_TIMEOUT(App::findText(app.window->contentItem(), text), 3000);
+        QQuickItem *label = App::findText(app.window->contentItem(), text);
+        QTRY_VERIFY(label->isVisible() && label->parentItem()->width() > label->implicitWidth());
+        QVERIFY(label->parentItem()->height() > label->implicitHeight());
+    }
+
     // Every dropdown in Settings is fed by a list built in
     // syncFromCurrentState(). Miss one and the control renders empty with no
     // error anywhere, which is exactly how the light/dark theme pickers

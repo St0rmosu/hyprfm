@@ -140,7 +140,8 @@ Rectangle {
                 visible: opacity > 0.01
                 hoverEnabled: shown
                 Accessible.role: Accessible.Button
-                Accessible.name: "Show sidebar"
+                tooltip: "Show sidebar"
+                shortcut: "toggle_sidebar"
                 onClicked: root.sidebarToggleRequested()
 
                 IconPanelLeft {
@@ -182,6 +183,7 @@ Rectangle {
                     delegate: HoverRect {
                         required property string modelData
                         width: Theme.controlSize; height: Theme.controlSize
+                        tooltip: modelData === "close" ? "Close" : modelData === "minimize" ? "Minimize" : "Maximize"
                         color: modelData === "close" && hovered
                             ? Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.9)
                             : (hovered ? Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.1) : "transparent")
@@ -207,6 +209,8 @@ Rectangle {
                     width: Theme.controlSize; height: Theme.controlSize
                     hoverEnabled: root.canGoBack
                     opacity: hoverEnabled ? 1.0 : 0.4
+                    tooltip: "Back"
+                    shortcut: "back"
                     onClicked: root.backRequested()
                     IconChevronLeft { anchors.centerIn: parent; size: 18; color: Theme.text }
                 }
@@ -216,6 +220,8 @@ Rectangle {
                     width: Theme.controlSize; height: Theme.controlSize
                     hoverEnabled: root.canGoForward
                     opacity: hoverEnabled ? 1.0 : 0.4
+                    tooltip: "Forward"
+                    shortcut: "forward"
                     onClicked: root.forwardRequested()
                     IconChevronRight { anchors.centerIn: parent; size: 18; color: Theme.text }
                 }
@@ -225,6 +231,8 @@ Rectangle {
                     width: Theme.controlSize; height: Theme.controlSize
                     hoverEnabled: !root.isRecentsView
                     opacity: hoverEnabled ? 1.0 : 0.4
+                    tooltip: "Parent folder"
+                    shortcut: "parent"
                     onClicked: root.upRequested()
                     IconChevronUp { anchors.centerIn: parent; size: 18; color: Theme.text }
                 }
@@ -303,7 +311,8 @@ Rectangle {
                                 width: viewSwitcher.segment
                                 height: viewSwitcher.segment
                                 Accessible.role: Accessible.RadioButton
-                                Accessible.name: modelData.name
+                                tooltip: modelData.name
+                                shortcut: modelData.mode + "_view"
                                 Accessible.checked: current
 
                                 // Only the selected segment is painted; the
@@ -344,6 +353,8 @@ Rectangle {
                             ? Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.1)
                             : "transparent")
                     rightClickEnabled: true
+                    tooltip: "Split view"
+                    shortcut: "split_view"
                     onClicked: root.splitViewToggled()
                     onRightClicked: root.splitOrientationToggled()
                     IconSquareSplitHorizontal {
@@ -398,6 +409,8 @@ Rectangle {
                 HoverRect {
                     width: Theme.controlSize; height: Theme.controlSize
                     visible: !root.searchMode && !root.isTrashView && !root.isRemoteView
+                    tooltip: "Search"
+                    shortcut: "search"
                     onClicked: root.searchClicked()
                     IconSearch { anchors.centerIn: parent; size: 18; color: Theme.text }
                 }
@@ -405,6 +418,8 @@ Rectangle {
                 HoverRect {
                     width: Theme.controlSize; height: Theme.controlSize
                     visible: !root.searchMode
+                    tooltip: "Keyboard shortcuts"
+                    shortcut: "keyboard_shortcuts"
                     onClicked: root.keyboardShortcutsRequested()
                     IconKeyboard { anchors.centerIn: parent; size: 18; color: Theme.text }
                 }
@@ -412,6 +427,8 @@ Rectangle {
                 HoverRect {
                     width: Theme.controlSize; height: Theme.controlSize
                     visible: !root.searchMode
+                    tooltip: "Settings"
+                    shortcut: "settings"
                     onClicked: root.settingsRequested()
                     IconSettings { anchors.centerIn: parent; size: 18; color: Theme.text }
                 }
@@ -428,6 +445,7 @@ Rectangle {
                     delegate: HoverRect {
                         required property string modelData
                         width: Theme.controlSize; height: Theme.controlSize
+                        tooltip: modelData === "close" ? "Close" : modelData === "minimize" ? "Minimize" : "Maximize"
                         color: modelData === "close" && hovered
                             ? Qt.rgba(Theme.error.r, Theme.error.g, Theme.error.b, 0.9)
                             : (hovered ? Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.1) : "transparent")
@@ -800,6 +818,12 @@ Rectangle {
                                     HoverHandler {
                                         id: closeHover
                                         cursorShape: Qt.PointingHandCursor
+                                    }
+
+                                    ShortcutTip {
+                                        text: "Close tab"
+                                        action: "close_tab"
+                                        shown: closeHover.hovered
                                     }
                                 }
                             }

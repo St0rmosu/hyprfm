@@ -10,6 +10,10 @@ Rectangle {
     // Off by default so right clicks reach whatever sits underneath, such as
     // the breadcrumb's right-click-to-edit area.
     property bool rightClickEnabled: false
+    // Hover tooltip; shortcut is an action from config.shortcutMap.
+    property string tooltip: ""
+    property string shortcut: ""
+    Accessible.name: tooltip
 
     signal clicked()
     signal rightClicked()
@@ -36,5 +40,11 @@ Rectangle {
                 root.clicked()
         }
         onDoubleClicked: root.doubleClicked()
+    }
+
+    ShortcutTip {
+        text: root.tooltip
+        action: root.shortcut
+        shown: hoverArea.containsMouse
     }
 }

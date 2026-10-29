@@ -172,6 +172,7 @@ Item {
                         hoverEnabled: true
                         onClicked: panel.closeTab(tabButton.tab)
                     }
+                    ShortcutTip { text: "Close tab"; keys: "Ctrl+Shift+W"; shown: tabCloseMouse.containsMouse }
                 }
             }
         }
@@ -190,6 +191,7 @@ Item {
                 hoverEnabled: true
                 onClicked: panel.newTab()
             }
+            ShortcutTip { text: "New tab"; keys: "Ctrl+Shift+T"; shown: addMouse.containsMouse }
         }
     }
 
@@ -390,6 +392,8 @@ Item {
                                 visible: modelData.icon === "close"
                                 anchors.centerIn: parent; size: 14; color: Theme.text
                             }
+
+                            ShortcutTip { text: modelData.tip; shown: findButtonMouse.containsMouse }
 
                             MouseArea {
                                 id: findButtonMouse

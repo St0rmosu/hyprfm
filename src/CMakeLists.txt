@@ -188,6 +188,7 @@ list(APPEND hyprfm_qml_module_args
         qml/components/KeyboardShortcutsDialog.qml
         qml/components/MissingDependenciesDialog.qml
         qml/components/SettingsPanel.qml
+        qml/components/ShortcutTip.qml
 )
 
 if(HYPRFM_TERMINAL)

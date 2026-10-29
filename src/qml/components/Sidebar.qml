@@ -100,6 +100,8 @@ Rectangle {
                 anchors.rightMargin: Theme.spacing
                 anchors.verticalCenter: parent.verticalCenter
                 width: 28; height: 28
+                tooltip: "Hide sidebar"
+                shortcut: "toggle_sidebar"
                 onClicked: root.collapseClicked()
                 IconPanelLeft { anchors.centerIn: parent; size: 16; color: Theme.subtext }
             }

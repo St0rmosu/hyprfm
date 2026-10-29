@@ -95,6 +95,7 @@ Item {
                 color: root.filterPanelOpen
                     ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.2)
                     : "transparent"
+                tooltip: "Filters"
                 onClicked: root.filterToggled()
 
                 IconFilter {
