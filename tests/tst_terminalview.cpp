@@ -957,17 +957,23 @@ private slots:
         QCOMPARE(switchTab.at(0).at(0).toInt(), -1);
     }
 
-    // History past scrollbackLines is dropped (by whole pages, so loosely).
+    // History past scrollbackLines is dropped. Ghostty drops whole pages,
+    // and how many rows a page holds depends on the width (so on the
+    // font), which leaves anything from about half the limit to a little
+    // over it: only the bound is checked.
     void testScrollbackLimit()
     {
+        QTemporaryDir dir;
+        const QString marker = dir.filePath(QStringLiteral("done"));
         TerminalView view;
         view.setSize(QSizeF(640, 240));
         view.setScrollbackLines(1000);
         view.start();
-        view.sendText(QStringLiteral("seq 1 20000; echo done; sleep 5\n"));
-        QTRY_VERIFY_WITH_TIMEOUT(view.scrollTotal() > 500, 5000);
-        QTest::qWait(1500);
-        QVERIFY2(view.scrollTotal() < 5000, qPrintable(QString::number(view.scrollTotal())));
+        view.sendText(QStringLiteral("seq 1 20000; touch %1; sleep 5\n").arg(marker));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(marker), 10000);
+        QTest::qWait(500);   // the last output is read before the marker shows
+        QVERIFY2(view.scrollTotal() > 100 && view.scrollTotal() < 5000,
+                 qPrintable(QString::number(view.scrollTotal())));
     }
 
     // Ctrl+= and Ctrl+- zoom by a point within 4-72, Ctrl+0 resets.
