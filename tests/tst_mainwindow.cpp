@@ -256,6 +256,49 @@ private slots:
         }
     }
 
+    // Clicking the current folder or the empty space in the breadcrumb edits
+    // the path (#62); the other segments still navigate.
+    void testBreadcrumbCurrentFolderClickEditsPath()
+    {
+        App app;
+        QVERIFY(app.load());
+
+        QTemporaryDir dir;
+        QVERIFY(QDir().mkpath(dir.path() + "/crumbparent/crumbcurrent"));
+        app.tabModel->activeTab()->navigateTo(dir.path() + "/crumbparent/crumbcurrent");
+        QTRY_VERIFY(App::findText(app.window->contentItem(), QStringLiteral("crumbcurrent")));
+        QTest::qWait(100);   // navigating queues a pane focus; let it land first
+
+        QQuickItem *current = App::findText(app.window->contentItem(), QStringLiteral("crumbcurrent"));
+        QQuickItem *breadcrumb = current;
+        while (breadcrumb && !breadcrumb->property("editMode").isValid())
+            breadcrumb = breadcrumb->parentItem();
+        QVERIFY(breadcrumb);
+        QVERIFY(!breadcrumb->property("editMode").toBool());
+
+        QTest::mouseClick(app.window, Qt::LeftButton, {}, app.center(current));
+        QTRY_VERIFY(breadcrumb->property("editMode").toBool());
+        QTest::qWait(600);   // the editor closes itself when it loses focus
+        QVERIFY(breadcrumb->property("editMode").toBool());
+        QTest::keyClick(app.window, Qt::Key_Escape);
+        QTRY_VERIFY(!breadcrumb->property("editMode").toBool());
+
+        QQuickItem *parent = App::findText(breadcrumb, QStringLiteral("crumbparent"));
+        QVERIFY(parent);
+        QTest::mouseClick(app.window, Qt::LeftButton, {}, app.center(parent));
+        QTRY_COMPARE(app.tabModel->activeTab()->currentPath(), dir.path() + "/crumbparent");
+        QVERIFY(!breadcrumb->property("editMode").toBool());
+
+        // At / the bar has no segments: all of it is empty space.
+        app.tabModel->activeTab()->navigateTo(QStringLiteral("/"));
+        QTRY_VERIFY(!App::findText(breadcrumb, QStringLiteral("crumbparent")));
+        QTest::qWait(QGuiApplication::styleHints()->mouseDoubleClickInterval() + 50);
+        QTest::mouseClick(app.window, Qt::LeftButton, {}, app.center(breadcrumb));
+        QTRY_VERIFY(breadcrumb->property("editMode").toBool());
+        QTest::qWait(600);
+        QVERIFY(breadcrumb->property("editMode").toBool());
+    }
+
     // Every dropdown in Settings is fed by a list built in
     // syncFromCurrentState(). Miss one and the control renders empty with no
     // error anywhere, which is exactly how the light/dark theme pickers

@@ -113,21 +113,14 @@ Item {
     height: 28
     clip: false
 
-    // Background MouseArea: right click anywhere on the bar (config-gated) or
-    // double click on empty space enters path edit mode with all text selected.
+    // Background MouseArea: right click anywhere on the bar (config-gated)
+    // enters path edit mode with all text selected.
     MouseArea {
         anchors.fill: parent
-        visible: !root.editMode
+        visible: !root.editMode && config.rightClickToEditPath
         z: -1
-        acceptedButtons: config.rightClickToEditPath ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
-        onPressed: (event) => {
-            if (event.button === Qt.RightButton && config.rightClickToEditPath)
-                root.startEditing()
-        }
-        onDoubleClicked: (mouse) => {
-            if (mouse.button === Qt.LeftButton)
-                root.startEditing()
-        }
+        acceptedButtons: Qt.RightButton
+        onPressed: root.startEditing()
     }
 
     // Clickable path segments (display mode)
@@ -144,6 +137,15 @@ Item {
         function showEnd() { contentX = Math.max(0, contentWidth - width) }
         onContentWidthChanged: showEnd()
         onWidthChanged: showEnd()
+
+        // Left click on empty space edits the path. It sits inside the
+        // Flickable, which would otherwise take the click.
+        MouseArea {
+            width: Math.max(segmentsFlickable.contentWidth, segmentsFlickable.width)
+            height: segmentsFlickable.height
+            cursorShape: Qt.IBeamCursor
+            onClicked: root.startEditing()
+        }
 
         Row {
             id: segmentsRow
@@ -198,8 +200,9 @@ Item {
                             height: 24
                             anchors.verticalCenter: parent.verticalCenter
                             width: segLabel.width + Theme.spacing
-                            hoverEnabled: !parent.isLast
-                            onClicked: root.navigateRequested(modelData.fullPath)
+                            // The current folder has nowhere to go: clicking it edits the path.
+                            cursorShape: parent.isLast ? Qt.IBeamCursor : Qt.PointingHandCursor
+                            onClicked: parent.isLast ? root.startEditing() : root.navigateRequested(modelData.fullPath)
                             onDoubleClicked: root.startEditing()
 
                             Text {
