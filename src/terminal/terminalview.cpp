@@ -270,6 +270,10 @@ TerminalView::TerminalView(QQuickItem *parent)
 
     const size_t scrollback = size_t(m_scrollbackLines);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &scrollback);
+    // Grapheme clustering (mode 2027) on, as kitty and Ghostty run: flags,
+    // skin tones and ZWJ emoji are one character, not two to four.
+    const GhosttyTerminalModeConfig graphemes = {GHOSTTY_MODE_GRAPHEME_CLUSTER, true};
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_MODE_DEFAULT, &graphemes);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_USERDATA, this);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
                          reinterpret_cast<const void *>(&TerminalView::onWritePty));

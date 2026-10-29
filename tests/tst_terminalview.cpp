@@ -206,6 +206,23 @@ private slots:
         QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("hello"));
     }
 
+    // A skin-toned emoji is one grapheme in two cells (mode 2027, as in
+    // kitty and Ghostty), so the letter after it sits in the third cell.
+    void testEmojiClustersIntoOneCell()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.start();
+        view.sendText(QStringLiteral("clear; printf '\\360\\237\\221\\215\\360\\237\\217\\275X'; sleep 5\n"));
+        QTest::qWait(400);
+        render(view);
+        mouse(view, QEvent::MouseButtonPress, cellCentre(view, 0, 0), 1000);
+        const QPointF end = cellCentre(view, 2, 0) + QPointF(2, 0);
+        mouse(view, QEvent::MouseMove, end, 1010);
+        mouse(view, QEvent::MouseButtonRelease, end, 1020, Qt::NoButton);
+        QCOMPARE(view.selectedText(), QString::fromUtf8("\U0001F44D\U0001F3FDX"));
+    }
+
     // A double click selects the word under it; a plain click clears it.
     void testDoubleClickSelectsWord()
     {
