@@ -8,6 +8,7 @@
 #include <QMouseEvent>
 #include <QDir>
 #include <QFileInfo>
+#include <QBuffer>
 #include <QImage>
 #include <QKeyEvent>
 #include <QPainter>
@@ -791,6 +792,46 @@ private slots:
         QCOMPARE(second - first, 61.0);   // P1 and its 60 lines
         press(Qt::Key_PageDown, Qt::ControlModifier | Qt::ShiftModifier);
         QCOMPARE(view.scrollOffset(), second);
+    }
+
+    // Kitty graphics: raw pixels and PNGs sent inline are drawn; a file
+    // the program names is never opened.
+    void testKittyGraphics()
+    {
+        QTemporaryDir dir;
+        QImage blue(20, 20, QImage::Format_RGB32);
+        blue.fill(Qt::blue);
+        const QString path = dir.filePath(QStringLiteral("blue.png"));
+        QVERIFY(blue.save(path));
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        QImage green(20, 20, QImage::Format_RGB32);
+        green.fill(Qt::green);
+        QVERIFY(green.save(&buffer, "PNG"));
+        QByteArray red;
+        for (int i = 0; i < 20 * 20; ++i)
+            red.append("\xff\x00\x00", 3);
+
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setBackground(Qt::black);
+        view.setForeground(Qt::white);
+        view.start();
+        const QString apc = QStringLiteral("printf '\\033_G%1;%2\\033\\\\'; ");
+        view.sendText(QStringLiteral("clear; ")
+                      + apc.arg(QStringLiteral("a=T,f=24,s=20,v=20,q=2"), QString::fromLatin1(red.toBase64()))
+                      + apc.arg(QStringLiteral("a=T,f=100,q=2"), QString::fromLatin1(png.toBase64()))
+                      + apc.arg(QStringLiteral("a=T,f=100,t=f,q=2"), QString::fromLatin1(path.toUtf8().toBase64()))
+                      + QStringLiteral("echo; sleep 5\n"));
+        const auto isRed = [](QColor c) { return c.red() > 200 && c.green() < 50 && c.blue() < 50; };
+        const auto isGreen = [](QColor c) { return c.green() > 200 && c.red() < 50 && c.blue() < 50; };
+        const auto isBlue = [](QColor c) { return c.blue() > 200 && c.red() < 50 && c.green() < 50; };
+        QImage image;
+        QTRY_VERIFY_WITH_TIMEOUT((image = render(view), countPixels(image, isGreen) >= 400), 5000);
+        QCOMPARE(countPixels(image, isRed), 400);
+        QCOMPARE(countPixels(image, isGreen), 400);
+        QCOMPARE(countPixels(image, isBlue), 0);
     }
 
     // History past scrollbackLines is dropped (by whole pages, so loosely).

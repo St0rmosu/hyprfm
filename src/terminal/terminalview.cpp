@@ -10,6 +10,8 @@
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QFontInfo>
+#include <QBuffer>
+#include <QImageReader>
 #include <QGuiApplication>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
@@ -200,6 +202,35 @@ QString ghosttyString(GhosttyTerminal terminal, GhosttyTerminalData data)
     return QString::fromUtf8(reinterpret_cast<const char *>(s.ptr), qsizetype(s.len));
 }
 
+// Kitty graphics PNGs, decoded by Qt into the RGBA rows Ghostty wants.
+// The size is checked before decoding: a tiny PNG can claim to be huge,
+// and Ghostty's allocator refuses what is over the storage limit anyway.
+bool decodePng(void *, const GhosttyAllocator *allocator, const uint8_t *data, size_t length,
+               GhosttySysImage *out)
+{
+    QByteArray bytes = QByteArray::fromRawData(reinterpret_cast<const char *>(data), qsizetype(length));
+    QBuffer buffer(&bytes);
+    QImageReader reader(&buffer, "png");
+    const QSize size = reader.size();
+    if (!size.isValid() || qint64(size.width()) * size.height() > 10000 * 10000)
+        return false;
+    const QImage image = reader.read().convertToFormat(QImage::Format_RGBA8888);
+    if (image.isNull())
+        return false;
+    const size_t rowBytes = size_t(image.width()) * 4;
+    const size_t total = rowBytes * size_t(image.height());
+    auto *pixels = static_cast<uint8_t *>(ghostty_alloc(allocator, total));
+    if (!pixels)
+        return false;
+    for (int y = 0; y < image.height(); ++y)
+        memcpy(pixels + y * rowBytes, image.constScanLine(y), rowBytes);
+    out->width = uint32_t(image.width());
+    out->height = uint32_t(image.height());
+    out->data = pixels;
+    out->data_len = total;
+    return true;
+}
+
 } // namespace
 
 TerminalView::TerminalView(QQuickItem *parent)
@@ -256,6 +287,25 @@ TerminalView::TerminalView(QQuickItem *parent)
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES, &clipboardLimit);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION,
                          reinterpret_cast<const void *>(&TerminalView::onDesktopNotification));
+    // Kitty graphics (kitten icat, yazi, chafa, timg...). Images only come
+    // inline with the output: a program asking the terminal to read a file
+    // or shared memory is refused, so `cat`ing something hostile cannot
+    // make it open local files.
+    static const bool pngDecoder = [] {
+        ghostty_sys_set(GHOSTTY_SYS_OPT_DECODE_PNG, reinterpret_cast<const void *>(&decodePng));
+        return true;
+    }();
+    Q_UNUSED(pngDecoder);
+    const uint64_t imageLimit = 128 * 1024 * 1024;
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &imageLimit);
+    const bool off = false;
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE, &off);
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_TEMP_FILE, nullptr);
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_SHARED_MEM, &off);
+    ghostty_render_state_image_iterator_new(nullptr, &m_images);
+    m_clock.start();
+    m_animationTimer.setSingleShot(true);
+    connect(&m_animationTimer, &QTimer::timeout, this, [this] { update(); });
     m_searchRefresh.setSingleShot(true);
     m_searchRefresh.setInterval(16);
     connect(&m_searchRefresh, &QTimer::timeout, this, &TerminalView::refreshSearch);
@@ -278,6 +328,7 @@ TerminalView::~TerminalView()
     ghostty_key_event_free(m_keyEvent);
     ghostty_key_encoder_free(m_keyEncoder);
     ghostty_render_state_row_cells_free(m_cells);
+    ghostty_render_state_image_iterator_free(m_images);
     ghostty_render_state_row_iterator_free(m_rows);
     ghostty_render_state_free(m_renderState);
     ghostty_terminal_free(m_terminal);
@@ -1570,6 +1621,126 @@ void TerminalView::paintSearchMatches(QPainter *painter)
     }
 }
 
+// The kitty images on screen, lowest first. Pixels are converted once per
+// image generation (a new upload or animation frame), not once per frame.
+QList<TerminalView::Image> TerminalView::imagesToDraw()
+{
+    QList<Image> images;
+    GhosttyKittyGraphics graphics = nullptr;
+    if (ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS, &graphics) != GHOSTTY_SUCCESS
+        || !graphics)
+        return images;
+    // Animations: show the due frame and wake for the next one.
+    uint64_t next = 0;
+    const uint64_t now = uint64_t(m_clock.elapsed());
+    if (ghostty_kitty_graphics_animation_tick(graphics, now, &next) == GHOSTTY_SUCCESS)
+        m_animationTimer.start(int(qMax<uint64_t>(8, next > now ? next - now : 0)));
+    // Images deleted or replaced leave the cache when the storage changes.
+    uint64_t storageGeneration = 0;
+    ghostty_kitty_graphics_get(graphics, GHOSTTY_KITTY_GRAPHICS_DATA_GENERATION, &storageGeneration);
+    if (storageGeneration != m_imageStorageGeneration) {
+        m_imageStorageGeneration = storageGeneration;
+        for (auto it = m_imageCache.begin(); it != m_imageCache.end();) {
+            if (ghostty_kitty_graphics_image(graphics, it.key()))
+                ++it;
+            else
+                it = m_imageCache.erase(it);
+        }
+    }
+    if (ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_IMAGE_ITERATOR, &m_images)
+        != GHOSTTY_SUCCESS)
+        return images;
+    while (ghostty_render_state_image_iterator_next(m_images)) {
+        GhosttyImageProtocol protocol = GHOSTTY_IMAGE_PROTOCOL_KITTY;
+        GhosttyRenderStateImageLayer layer = GHOSTTY_RENDER_STATE_IMAGE_LAYER_ABOVE_TEXT;
+        uint32_t id = 0, offsetX = 0, offsetY = 0, width = 0, height = 0;
+        uint32_t srcX = 0, srcY = 0, srcWidth = 0, srcHeight = 0;
+        uint64_t generation = 0;
+        int32_t col = 0, row = 0, z = 0;
+        GhosttyRenderStateImageData keys[] = {
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_PROTOCOL, GHOSTTY_RENDER_STATE_IMAGE_DATA_IMAGE_ID,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_IMAGE_GENERATION, GHOSTTY_RENDER_STATE_IMAGE_DATA_LAYER,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_Z, GHOSTTY_RENDER_STATE_IMAGE_DATA_VIEWPORT_COL,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_VIEWPORT_ROW, GHOSTTY_RENDER_STATE_IMAGE_DATA_CELL_OFFSET_X,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_CELL_OFFSET_Y, GHOSTTY_RENDER_STATE_IMAGE_DATA_PIXEL_WIDTH,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_PIXEL_HEIGHT, GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_X,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_Y, GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_WIDTH,
+            GHOSTTY_RENDER_STATE_IMAGE_DATA_SOURCE_HEIGHT,
+        };
+        void *values[] = {&protocol, &id, &generation, &layer, &z, &col, &row, &offsetX, &offsetY,
+                          &width, &height, &srcX, &srcY, &srcWidth, &srcHeight};
+        if (ghostty_render_state_image_get_multi(m_images, std::size(keys), keys, values, nullptr)
+                != GHOSTTY_SUCCESS
+            || protocol != GHOSTTY_IMAGE_PROTOCOL_KITTY)
+            continue;
+
+        CachedImage &cached = m_imageCache[id];
+        if (cached.pixels.isNull() || cached.generation != generation) {
+            cached = {generation, imagePixels(graphics, id)};
+            if (cached.pixels.isNull())
+                continue;
+        }
+        Image image;
+        image.layer = layer;
+        image.z = z;
+        image.pixels = cached.pixels;
+        image.target = QRectF(Padding + col * m_cellWidth + offsetX, Padding + row * m_cellHeight + offsetY,
+                              width, height);
+        image.source = QRectF(srcX, srcY, srcWidth, srcHeight);
+        images.append(image);
+    }
+    std::stable_sort(images.begin(), images.end(),
+                     [](const Image &a, const Image &b) { return a.z < b.z; });
+    return images;
+}
+
+QImage TerminalView::imagePixels(GhosttyKittyGraphics graphics, uint32_t id)
+{
+    GhosttyKittyGraphicsImage image = ghostty_kitty_graphics_image(graphics, id);
+    if (!image)
+        return {};
+    uint32_t width = 0, height = 0;
+    GhosttyKittyImageFormat format = GHOSTTY_KITTY_IMAGE_FORMAT_RGBA;
+    const uint8_t *pixels = nullptr;
+    size_t length = 0;
+    GhosttyKittyGraphicsImageData keys[] = {
+        GHOSTTY_KITTY_IMAGE_DATA_WIDTH, GHOSTTY_KITTY_IMAGE_DATA_HEIGHT, GHOSTTY_KITTY_IMAGE_DATA_FORMAT,
+        GHOSTTY_KITTY_IMAGE_DATA_DATA_PTR, GHOSTTY_KITTY_IMAGE_DATA_DATA_LEN,
+    };
+    void *values[] = {&width, &height, &format, &pixels, &length};
+    if (ghostty_kitty_graphics_image_get_multi(image, std::size(keys), keys, values, nullptr) != GHOSTTY_SUCCESS
+        || !pixels || width == 0 || height == 0)
+        return {};
+    QImage::Format qtFormat = QImage::Format_RGBA8888;
+    int depth = 4;
+    switch (format) {
+    case GHOSTTY_KITTY_IMAGE_FORMAT_RGB: qtFormat = QImage::Format_RGB888; depth = 3; break;
+    case GHOSTTY_KITTY_IMAGE_FORMAT_GRAY: qtFormat = QImage::Format_Grayscale8; depth = 1; break;
+    case GHOSTTY_KITTY_IMAGE_FORMAT_GRAY_ALPHA: {
+        // Qt has no grey+alpha format; spread it out to RGBA.
+        if (length < size_t(width) * height * 2)
+            return {};
+        QImage rgba(int(width), int(height), QImage::Format_RGBA8888);
+        for (uint32_t y = 0; y < height; ++y) {
+            uchar *line = rgba.scanLine(int(y));
+            const uint8_t *in = pixels + size_t(y) * width * 2;
+            for (uint32_t x = 0; x < width; ++x) {
+                line[4 * x] = line[4 * x + 1] = line[4 * x + 2] = in[2 * x];
+                line[4 * x + 3] = in[2 * x + 1];
+            }
+        }
+        return rgba;
+    }
+    default: break;
+    }
+    const size_t stride = size_t(width) * depth;
+    if (length < stride * height)
+        return {};
+    // A copy: the storage owns the pixels and may free them on the next write.
+    return QImage(pixels, int(width), int(height), qsizetype(stride), qtFormat)
+        .convertToFormat(QImage::Format_ARGB32_Premultiplied);
+}
+
 void TerminalView::paint(QPainter *painter)
 {
     if (ghostty_render_state_update(m_renderState, m_terminal) != GHOSTTY_SUCCESS)
@@ -1582,6 +1753,13 @@ void TerminalView::paint(QPainter *painter)
     painter->setCompositionMode(QPainter::CompositionMode_Source);
     painter->fillRect(boundingRect(), background);
     painter->setCompositionMode(QPainter::CompositionMode_SourceOver);
+    const QList<Image> images = imagesToDraw();
+    // ponytail: below-text images go under cell backgrounds too; kitty
+    // keeps those apart, which needs the backgrounds in a pass of their own.
+    for (const Image &image : images) {
+        if (image.layer != GHOSTTY_RENDER_STATE_IMAGE_LAYER_ABOVE_TEXT)
+            painter->drawImage(image.target, image.pixels, image.source);
+    }
     if (ghostty_render_state_get(m_renderState, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &m_rows)
         != GHOSTTY_SUCCESS)
         return;
@@ -1675,6 +1853,9 @@ void TerminalView::paint(QPainter *painter)
                 codepoints.resize(graphemeLen);
                 ghostty_render_state_row_cells_get(m_cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF,
                                                    codepoints.data());
+            }
+            // Kitty image placeholders: the image list draws these cells.
+            if (drawn && codepoints[0] != 0x10EEEE) {
                 QColor color = qcolor(fg);
                 if (style.faint)
                     color.setAlphaF(0.6);
@@ -1714,6 +1895,11 @@ void TerminalView::paint(QPainter *painter)
         }
         flush();
         y += m_cellHeight;
+    }
+
+    for (const Image &image : images) {
+        if (image.layer == GHOSTTY_RENDER_STATE_IMAGE_LAYER_ABOVE_TEXT)
+            painter->drawImage(image.target, image.pixels, image.source);
     }
 
     paintSearchMatches(painter);

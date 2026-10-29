@@ -3,6 +3,8 @@
 #include <QColor>
 #include <QElapsedTimer>
 #include <QFont>
+#include <QHash>
+#include <QImage>
 #include <QQuickPaintedItem>
 #include <QStringList>
 #include <QTimer>
@@ -205,6 +207,15 @@ private:
     bool activateLink(const QString &uri);
     void refreshSearch();
     void updateScrollbar();
+    struct Image {
+        int layer = 0;
+        int z = 0;
+        QImage pixels;
+        QRectF target;
+        QRectF source;
+    };
+    QList<Image> imagesToDraw();
+    static QImage imagePixels(GhosttyKittyGraphics graphics, uint32_t id);
     void scrollViewport(GhosttyTerminalScrollViewport scroll);
     bool scrollKey(QKeyEvent *event);
     void paintSearchMatches(QPainter *painter);
@@ -274,6 +285,17 @@ private:
     QTimer m_blinkTimer;
     // Visual bell: the view is tinted while this single-shot timer runs.
     QTimer m_bellTimer;
+    // Kitty graphics: converted pixels per image ID, and the clock and
+    // timer that play animations.
+    struct CachedImage {
+        uint64_t generation = 0;
+        QImage pixels;
+    };
+    QHash<uint32_t, CachedImage> m_imageCache;
+    uint64_t m_imageStorageGeneration = 0;
+    GhosttyRenderStateImageIterator m_images = nullptr;
+    QElapsedTimer m_clock;
+    QTimer m_animationTimer;
     // Regular, bold, italic, bold italic: m_font fitted to the cell grid.
     QFont m_cellFonts[4];
     QColor m_foreground = QColor(0xcd, 0xd6, 0xf4);
