@@ -356,7 +356,7 @@ if(HYPRFM_TERMINAL)
         ${CMAKE_SOURCE_DIR}/src/terminal/terminalview.h
     )
     target_include_directories(tst_terminalview PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(tst_terminalview PRIVATE Qt6::Test Qt6::Quick ghostty-vt-static util)
+    target_link_libraries(tst_terminalview PRIVATE Qt6::Test Qt6::Quick Qt6::DBus ghostty-vt-static util)
     add_test(NAME tst_terminalview COMMAND tst_terminalview)
     set_tests_properties(tst_terminalview PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

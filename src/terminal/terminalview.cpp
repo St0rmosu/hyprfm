@@ -2,6 +2,8 @@
 
 #include <QClipboard>
 #include <QCursor>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFontDatabase>
@@ -248,6 +250,8 @@ TerminalView::TerminalView(QQuickItem *parent)
                          reinterpret_cast<const void *>(&TerminalView::onClipboardWrite));
     const size_t clipboardLimit = 8 * 1024 * 1024;
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES, &clipboardLimit);
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION,
+                         reinterpret_cast<const void *>(&TerminalView::onDesktopNotification));
     m_bellTimer.setSingleShot(true);
     m_bellTimer.setInterval(120);
     connect(&m_bellTimer, &QTimer::timeout, this, [this] { update(); });
@@ -704,6 +708,42 @@ void TerminalView::onClipboardWrite(GhosttyTerminal, void *, const GhosttyClipbo
         break;
     }
     write->reply(write, &reply);
+}
+
+void TerminalView::onDesktopNotification(GhosttyTerminal, void *self,
+                                         const GhosttyTerminalDesktopNotification *notification)
+{
+    auto *view = static_cast<TerminalView *>(self);
+    // Anything the shell runs can send these, so a loop must not bury the
+    // desktop in notifications: one a second, the rest dropped.
+    if (view->m_lastNotification.isValid() && view->m_lastNotification.elapsed() < 1000)
+        return;
+    view->m_lastNotification.start();
+    const auto text = [](const GhosttyString &s, qsizetype max) {
+        QString out = QString::fromUtf8(reinterpret_cast<const char *>(s.ptr), qsizetype(s.len)).left(max);
+        for (QChar &c : out) {
+            if (c.category() == QChar::Other_Control)
+                c = QLatin1Char(' ');
+        }
+        return out.trimmed();
+    };
+    QString title = text(notification->title, 120);
+    const QString body = text(notification->body, 1000);
+    if (title.isEmpty() && body.isEmpty())
+        return;
+    if (title.isEmpty())
+        title = view->m_title.isEmpty() ? QStringLiteral("Terminal") : view->m_title.left(120);
+    Q_EMIT view->notification(title, body);
+    if (!view->m_desktopNotifications)
+        return;
+    // The body is markup to most notification servers (links, images), so
+    // the program's text is escaped; the call is fire and forget.
+    QDBusMessage call = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("/org/freedesktop/Notifications"),
+        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("Notify"));
+    call << QStringLiteral("HyprFM") << uint(0) << QStringLiteral("utilities-terminal") << title
+         << body.toHtmlEscaped() << QStringList() << QVariantMap() << int(-1);
+    QDBusConnection::sessionBus().send(call);
 }
 
 bool TerminalView::event(QEvent *event)

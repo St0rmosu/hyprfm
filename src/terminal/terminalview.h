@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QQuickPaintedItem>
 #include <QStringList>
@@ -46,6 +47,9 @@ class TerminalView : public QQuickPaintedItem
     // Shortcuts the window keeps while the terminal has focus (the panel
     // toggle, say); every other key goes to the shell, Ctrl+C included.
     Q_PROPERTY(QStringList windowShortcuts MEMBER m_windowShortcuts)
+    // Whether OSC 9 / OSC 777 notifications go to the desktop's notification
+    // server; the notification signal fires either way.
+    Q_PROPERTY(bool desktopNotifications MEMBER m_desktopNotifications)
 
 public:
     explicit TerminalView(QQuickItem *parent = nullptr);
@@ -110,6 +114,9 @@ signals:
     // BEL from the program. The view flashes and, in a window in the
     // background, asks the compositor for attention itself.
     void bell();
+    // A notification from the program (OSC 9, OSC 777), plain text, length
+    // capped, at most one a second.
+    void notification(const QString &title, const QString &body);
 
 protected:
     bool event(QEvent *event) override;
@@ -148,6 +155,8 @@ private:
     static void onPwdChanged(GhosttyTerminal, void *self);
     static void onBell(GhosttyTerminal, void *self);
     static void onClipboardWrite(GhosttyTerminal, void *self, const GhosttyClipboardWrite *write);
+    static void onDesktopNotification(GhosttyTerminal, void *self,
+                                      const GhosttyTerminalDesktopNotification *notification);
 
     GhosttyTerminal m_terminal = nullptr;
     GhosttyRenderState m_renderState = nullptr;
@@ -174,6 +183,8 @@ private:
     QString m_shellDirectory;
     QString m_title;
     QStringList m_windowShortcuts;
+    bool m_desktopNotifications = true;
+    QElapsedTimer m_lastNotification;
     QFont m_font;
     QString m_fontFamily;
     qreal m_fontSize = 0;

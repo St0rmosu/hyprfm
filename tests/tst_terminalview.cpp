@@ -574,6 +574,27 @@ private slots:
         QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("secret"));
     }
 
+    // OSC 9 and OSC 777 reach the notification signal as plain text, and
+    // a burst of them makes one notification, not a flood.
+    void testNotifications()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setProperty("desktopNotifications", false);   // never the live desktop's server
+        QSignalSpy notified(&view, &TerminalView::notification);
+        view.start();
+        view.sendText(QStringLiteral("printf '\\033]777;notify;Build;done <b>ok</b>\\a'; for i in 1 2 3 4 5; do printf '\\033]9;spam\\a'; done\n"));
+        QTRY_COMPARE_WITH_TIMEOUT(notified.count(), 1, 5000);
+        QCOMPARE(notified.at(0).at(0).toString(), QStringLiteral("Build"));
+        QCOMPARE(notified.at(0).at(1).toString(), QStringLiteral("done <b>ok</b>"));
+        QTest::qWait(300);
+        QCOMPARE(notified.count(), 1);
+        QTest::qWait(1000);
+        view.sendText(QStringLiteral("printf '\\033]9;later\\a'\n"));
+        QTRY_COMPARE_WITH_TIMEOUT(notified.count(), 2, 5000);
+        QCOMPARE(notified.at(1).at(1).toString(), QStringLiteral("later"));
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;
