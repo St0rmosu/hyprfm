@@ -238,6 +238,62 @@ ApplicationWindow {
         root.sidebarVisible = !root.sidebarVisible
         root.sidebarWaitingForWidth = false
     }
+
+    // ── Built-in terminal panel ──────────────────────────────────────────────
+    property bool terminalPanelOpen: false
+    // The panel is created on first open and kept while hidden, so the shell
+    // survives F4; it goes when the shell exits.
+    property bool terminalPanelCreated: false
+    // Set by main.cpp in builds with HYPRFM_TERMINAL; tests leave it unset.
+    readonly property bool builtinTerminalAvailable:
+        typeof hyprfmBuiltinTerminal !== "undefined" && hyprfmBuiltinTerminal
+
+    function toggleTerminalPanel() {
+        if (root.terminalPanelOpen)
+            root.closeTerminalPanel()
+        else
+            root.openTerminalPanel("")
+    }
+
+    // Shows the panel. A new shell starts in `path` (or the active folder);
+    // a running one is taken to `path` if it is at its prompt.
+    function openTerminalPanel(path) {
+        if (!root.builtinTerminalAvailable)
+            return
+        root.terminalPanelCreated = true
+        root.terminalPanelOpen = true
+        var view = terminalPanelLoader.item.terminal
+        if (!view.running) {
+            var dir = path || root.panePath(root.activePane)
+            view.workingDirectory = root.isLocalPath(dir) ? dir : ""
+            view.start()
+        } else if (path) {
+            view.changeDirectory(path)
+        }
+        view.forceActiveFocus()
+    }
+
+    function otherTerminalItems() {
+        if (!root.builtinTerminalAvailable)
+            return []
+        return [{ text: config.builtinTerminal ? "Open in External Terminal" : "Open in Built-in Terminal",
+                  shortcut: "", action: "terminal_other" }]
+    }
+
+    function closeTerminalPanel() {
+        root.terminalPanelOpen = false
+        root.scheduleActivePaneFocus()
+    }
+
+    // Open in Terminal, from every menu and the shortcut. `other` picks the
+    // kind the setting does not, for the second menu entry.
+    function openTerminalAt(path, other) {
+        if (root.builtinTerminalAvailable && config.builtinTerminal !== !!other)
+            root.openTerminalPanel(path)
+        else
+            fileOps.openInTerminal(path)
+    }
+
     readonly property int minSidebarWidth: 160
     readonly property int maxSidebarWidth: 480
     property bool sidebarResizeActive: false
@@ -600,6 +656,7 @@ ApplicationWindow {
             && !root.isShown(root.deleteConfirmDialog)
             && !root.isShown(root.emptyTrashConfirmDialog)
             && !root.isShown(root.customActionConfirmDialog)
+            && !root.isShown(root.terminalPasteConfirmDialog)
             && !root.isShown(root.runExecutableDialog)
             && !(root.quickPreview && root.quickPreview.active)
     }
@@ -3037,6 +3094,46 @@ ApplicationWindow {
     }
     readonly property var customActionConfirmDialog: customActionConfirmDialogLoader.item
 
+    // ── Terminal paste confirmation ──────────────────────────────────────────
+    // The shell has bracketed paste off, so each pasted line would run as
+    // soon as it lands.
+    property string pendingTerminalPaste: ""
+    // The tab's view; null once that tab has closed.
+    property var pendingTerminalPasteView: null
+    Loader {
+        id: terminalPasteConfirmDialogLoader
+        objectName: "terminalPasteConfirmDialogLoader"
+        anchors.fill: parent
+        z: 9998
+        active: false
+        sourceComponent: Component {
+            ConfirmDialog {
+                title: "Paste and run?"
+                confirmText: "Paste"
+                confirmVariant: "primary"
+                message: "The clipboard holds more than one line, and what is running in the terminal "
+                    + "gets each line as soon as it is pasted, as if Enter were pressed:\n\n" + root.pendingTerminalPaste.substring(0, 400)
+                    + (root.pendingTerminalPaste.length > 400 ? "…" : "")
+                onAccepted: {
+                    const terminal = root.pendingTerminalPasteView
+                    if (terminal) {
+                        terminal.pasteText(root.pendingTerminalPaste)
+                        terminal.forceActiveFocus()
+                    }
+                    root.pendingTerminalPaste = ""
+                    root.pendingTerminalPasteView = null
+                }
+                onRejected: {
+                    root.pendingTerminalPaste = ""
+                    if (root.pendingTerminalPasteView)
+                        root.pendingTerminalPasteView.forceActiveFocus()
+                    root.pendingTerminalPasteView = null
+                }
+            }
+        }
+    }
+    readonly property var terminalPasteConfirmDialog: terminalPasteConfirmDialogLoader.item
+
     // ── Run Executable Dialog ────────────────────────────────────────────────
     // Activating a program asks instead of handing it to xdg-open, which has
     // no idea how to "open" a script or binary (#48).
@@ -3209,8 +3306,9 @@ ApplicationWindow {
                 }
 
                 onOpenInTerminalRequested: (path) => {
-                    fileOps.openInTerminal(path)
+                    root.openTerminalAt(path)
                 }
+                onOpenInOtherTerminalRequested: (path) => root.openTerminalAt(path, true)
 
                 onNewFolderRequested: (parentPath) => {
                     root.showNewFolderDialog(parentPath)
@@ -3288,7 +3386,11 @@ ApplicationWindow {
 
                 onOpenInTerminalRequested: (path) => {
                     if (path)
-                        fileOps.openInTerminal(path)
+                        root.openTerminalAt(path)
+                }
+                onOpenInOtherTerminalRequested: (path) => {
+                    if (path)
+                        root.openTerminalAt(path, true)
                 }
 
                 onCustomActionRequested: (action) => {
@@ -3642,8 +3744,14 @@ ApplicationWindow {
         onActivated: {
             var path = root.selectedOrCurrentTerminalPath()
             if (root.isLocalPath(path))
-                fileOps.openInTerminal(path)
+                root.openTerminalAt(path)
         }
+    }
+
+    Shortcut {
+        sequence: config.shortcutMap["toggle_terminal"]
+        enabled: root.builtinTerminalAvailable
+        onActivated: root.toggleTerminalPanel()
     }
 
     Shortcut {
@@ -3760,6 +3868,7 @@ ApplicationWindow {
                 { text: "Open in Split View", shortcut: "", action: "split_open", icon: "SquareSplitHorizontal" },
                 { separator: true },
                 { text: "Open in Terminal", shortcut: "", action: "terminal" },
+                ...root.otherTerminalItems(),
                 { text: "Properties", shortcut: "", action: "properties" },
                 { separator: true },
                 hideEntry
@@ -3773,6 +3882,7 @@ ApplicationWindow {
                 { text: "Open in Split View", shortcut: "", action: "split_open", icon: "SquareSplitHorizontal" },
                 { separator: true },
                 { text: "Open in Terminal", shortcut: "", action: "terminal" },
+                ...root.otherTerminalItems(),
                 { text: "Properties", shortcut: "", action: "properties" },
                 { separator: true },
                 { text: "Rename", shortcut: "", action: "renamebookmark" },
@@ -3800,6 +3910,7 @@ ApplicationWindow {
                 { text: "Open in Split View", shortcut: "", action: "split_open", icon: "SquareSplitHorizontal" },
                 { separator: true },
                 { text: "Open in Terminal", shortcut: "", action: "terminal" },
+                ...root.otherTerminalItems(),
                 { text: "Properties", shortcut: "", action: "properties" },
                 { separator: true },
                 { text: "Unmount", shortcut: "", action: "unmountdevice" }
@@ -4391,6 +4502,43 @@ ApplicationWindow {
                         }
                     }
                 }
+                }
+
+                Loader {
+                    id: terminalPanelLoader
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: item ? item.implicitHeight : 0
+                    visible: root.terminalPanelOpen
+                    active: root.terminalPanelCreated
+                    // By URL: the file is only in the module when the terminal
+                    // is built in.
+                    source: Qt.resolvedUrl("components/TerminalPanel.qml")
+                    onLoaded: {
+                        item.maximumHeight = Qt.binding(() => root.height * 0.7)
+                        item.windowShortcuts = Qt.binding(() => [config.shortcutMap["toggle_terminal"]])
+                    }
+
+                    Connections {
+                        target: terminalPanelLoader.item
+                        function onFinished() {
+                            root.closeTerminalPanel()
+                            // Not from inside the shell's own signal.
+                            Qt.callLater(() => { root.terminalPanelCreated = false })
+                        }
+                        function onUnsafePaste(view, text) {
+                            root.pendingTerminalPasteView = view
+                            root.pendingTerminalPaste = text
+                            root.openDialog(terminalPasteConfirmDialogLoader)
+                        }
+                        // The view only passes on web, mail and local
+                        // folder links; see TerminalView::activateLink().
+                        function onLinkActivated(url) {
+                            Qt.openUrlExternally(url)
+                        }
+                        function onFolderActivated(path) {
+                            root.navigateActivePaneTo(path)
+                        }
+                    }
                 }
 
                 StatusBar {

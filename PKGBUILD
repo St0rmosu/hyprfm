@@ -20,6 +20,7 @@ makedepends=(
     'cmake'
     'ninja'
     'git'
+    'zig'
     'kwindowsystem'
     'qt6-base'
     'qt6-declarative'

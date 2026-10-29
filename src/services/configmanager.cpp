@@ -93,6 +93,7 @@ const ShortcutSpec kShortcutSpecs[] = {
     {"path_bar", "Focus Path Bar"},
     {"toggle_sidebar", "Toggle Sidebar"},
     {"split_view", "Toggle Split View"},
+    {"toggle_terminal", "Toggle Terminal Panel"},
     {"focus_next_pane", "Focus Next Pane"},
     {"focus_previous_pane", "Focus Previous Pane"},
     {"focus_left_pane", "Focus Left Pane"},
@@ -184,6 +185,7 @@ QMap<QString, QString> ConfigManager::s_defaultShortcuts = {
     {"path_bar", "Ctrl+L"},
     {"toggle_sidebar", "F9"},
     {"split_view", "F3"},
+    {"toggle_terminal", "F4"},
     {"focus_next_pane", "F6"},
     {"focus_previous_pane", "Shift+F6"},
     {"focus_left_pane", "Ctrl+Alt+Left"},
@@ -285,6 +287,18 @@ QStringList ConfigManager::availableFonts() const
     return fonts;
 }
 
+QStringList ConfigManager::availableMonospaceFonts() const
+{
+    const QFontDatabase db;
+    QStringList fonts;
+    for (const QString &family : db.families()) {
+        if (db.isFixedPitch(family) && !fonts.contains(family))
+            fonts.append(family);
+    }
+    fonts.sort(Qt::CaseInsensitive);
+    return fonts;
+}
+
 QStringList ConfigManager::availableIconThemes() const
 {
     QStringList themes;
@@ -327,6 +341,13 @@ void ConfigManager::setDefaults()
     m_hiddenLast = false;
     m_rightClickToEditPath = true;
     m_singleClickOpensFolders = false;
+    m_builtinTerminal = false;
+    m_terminalFontFamily.clear();
+    m_terminalFontSize = 0;
+    m_terminalLigatures = false;
+    m_terminalCursorStyle = QStringLiteral("block");
+    m_terminalCursorBlink = true;
+    m_terminalScrollbackLines = 10000;
     m_sortBy = "name";
     m_sortAscending = true;
     m_rememberSortPerFolder = true;
@@ -438,6 +459,26 @@ void ConfigManager::loadConfig()
             m_rightClickToEditPath = *v;
         if (auto v = config["general"]["single_click_opens_folders"].value<bool>())
             m_singleClickOpensFolders = *v;
+        if (auto v = config["general"]["builtin_terminal"].value<bool>())
+            m_builtinTerminal = *v;
+        if (auto v = config["terminal"]["font_family"].value<std::string>())
+            m_terminalFontFamily = QString::fromStdString(*v).trimmed();
+        if (auto v = config["terminal"]["font_size"].value<double>())
+            m_terminalFontSize = qBound(0.0, *v, 72.0);
+        else if (auto v = config["terminal"]["font_size"].value<int64_t>())
+            m_terminalFontSize = qBound(0.0, double(*v), 72.0);
+        if (auto v = config["terminal"]["ligatures"].value<bool>())
+            m_terminalLigatures = *v;
+        if (auto v = config["terminal"]["cursor_blink"].value<bool>())
+            m_terminalCursorBlink = *v;
+        // ponytail: capped at a million lines, a few hundred MB at worst.
+        if (auto v = config["terminal"]["scrollback_lines"].value<int64_t>())
+            m_terminalScrollbackLines = int(std::clamp<int64_t>(*v, 0, 1000000));
+        if (auto v = config["terminal"]["cursor_style"].value<std::string>()) {
+            const QString style = QString::fromStdString(*v).trimmed().toLower();
+            if (style == "block" || style == "bar" || style == "underline")
+                m_terminalCursorStyle = style;
+        }
         if (auto v = config["general"]["dependency_startup_check"].value<bool>())
             m_dependencyStartupCheck = *v;
         if (auto v = config["general"]["sort_by"].value<std::string>())
@@ -716,6 +757,10 @@ right_click_to_edit_path = true
 # open on double-click; Ctrl/Shift+click still selects.
 single_click_opens_folders = false
 
+# Open in Terminal (menu and shortcut) uses the terminal panel at the bottom
+# of the window instead of $TERMINAL. The panel itself toggles with F4.
+builtin_terminal = false
+
 # Sort order: "name" | "size" | "modified" | "type"
 sort_by = "name"
 sort_ascending = true
@@ -725,6 +770,20 @@ remember_sort_per_folder = true
 
 # Warn at startup when a tool HyprFM uses (gvfs, ffmpeg, bat, pdftoppm…) is missing.
 dependency_startup_check = true
+
+[terminal]
+# The built-in terminal (F4). Empty font_family: the desktop's monospace
+# font (GNOME's monospace-font-name); font_size 0: its size. Ligatures draw "->", "!=", "=>" as one
+# symbol in fonts that have them (Fira Code, JetBrains Mono, Maple Mono).
+# Its background follows [appearance] transparency, like the file view.
+font_family = ""
+font_size = 0
+ligatures = false
+# block, bar or underline. Programs can still change it (vim's insert mode).
+cursor_style = "block"
+cursor_blink = true
+# Lines of history kept above the screen (up to 1000000).
+scrollback_lines = 10000
 
 [sidebar]
 # "left" | "right"
@@ -848,6 +907,7 @@ current_fraction = 0.5
 # path_bar          = "Ctrl+L"
 # toggle_sidebar    = "F9"
 # split_view        = "F3"
+# toggle_terminal   = "F4"
 # focus_next_pane   = "F6"
 # focus_previous_pane = "Shift+F6"
 # focus_left_pane   = "Ctrl+Alt+Left"
@@ -988,6 +1048,7 @@ bool ConfigManager::showHidden() const { return m_showHidden; }
 bool ConfigManager::hiddenLast() const { return m_hiddenLast; }
 bool ConfigManager::rightClickToEditPath() const { return m_rightClickToEditPath; }
 bool ConfigManager::singleClickOpensFolders() const { return m_singleClickOpensFolders; }
+bool ConfigManager::builtinTerminal() const { return m_builtinTerminal; }
 bool ConfigManager::dependencyStartupCheck() const { return m_dependencyStartupCheck; }
 QString ConfigManager::sortBy() const { return m_sortBy; }
 bool ConfigManager::sortAscending() const { return m_sortAscending; }
@@ -1257,6 +1318,11 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
         general.insert_or_assign("single_click_opens_folders", m_singleClickOpensFolders);
     }
 
+    if (settings.contains("builtinTerminal")) {
+        m_builtinTerminal = settings.value("builtinTerminal").toBool();
+        general.insert_or_assign("builtin_terminal", m_builtinTerminal);
+    }
+
     if (settings.contains("dependencyStartupCheck")) {
         m_dependencyStartupCheck = settings.value("dependencyStartupCheck").toBool();
         general.insert_or_assign("dependency_startup_check", m_dependencyStartupCheck);
@@ -1392,6 +1458,34 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
         appearance.insert_or_assign("anim_curve_exit", m_animCurveExit.toStdString());
         appearance.insert_or_assign("anim_curve_transition", m_animCurveTransition.toStdString());
         config.insert_or_assign("appearance", std::move(appearance));
+    }
+
+    if (settings.contains("terminalFontFamily") || settings.contains("terminalFontSize")
+        || settings.contains("terminalLigatures") || settings.contains("terminalCursorStyle")
+        || settings.contains("terminalCursorBlink") || settings.contains("terminalScrollbackLines")) {
+        if (settings.contains("terminalFontFamily"))
+            m_terminalFontFamily = settings.value("terminalFontFamily").toString().trimmed();
+        if (settings.contains("terminalFontSize"))
+            m_terminalFontSize = qBound(0.0, settings.value("terminalFontSize").toDouble(), 72.0);
+        if (settings.contains("terminalLigatures"))
+            m_terminalLigatures = settings.value("terminalLigatures").toBool();
+        if (settings.contains("terminalCursorBlink"))
+            m_terminalCursorBlink = settings.value("terminalCursorBlink").toBool();
+        if (settings.contains("terminalScrollbackLines"))
+            m_terminalScrollbackLines = qBound(0, settings.value("terminalScrollbackLines").toInt(), 1000000);
+        const QString cursorStyle = settings.value("terminalCursorStyle").toString();
+        if (cursorStyle == "block" || cursorStyle == "bar" || cursorStyle == "underline")
+            m_terminalCursorStyle = cursorStyle;
+        toml::table terminal;
+        if (auto existing = config["terminal"].as_table())
+            terminal = *existing;
+        terminal.insert_or_assign("font_family", m_terminalFontFamily.toStdString());
+        terminal.insert_or_assign("font_size", m_terminalFontSize);
+        terminal.insert_or_assign("ligatures", m_terminalLigatures);
+        terminal.insert_or_assign("cursor_style", m_terminalCursorStyle.toStdString());
+        terminal.insert_or_assign("cursor_blink", m_terminalCursorBlink);
+        terminal.insert_or_assign("scrollback_lines", int64_t(m_terminalScrollbackLines));
+        config.insert_or_assign("terminal", std::move(terminal));
     }
 
     // Window controls

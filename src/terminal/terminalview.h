@@ -1,0 +1,325 @@
+#pragma once
+
+#include <QColor>
+#include <QElapsedTimer>
+#include <QFont>
+#include <QHash>
+#include <QImage>
+#include <QQuickPaintedItem>
+#include <QStringList>
+#include <QTimer>
+#include <QVariantList>
+
+// Ghostty names a struct field `emit`, which Qt defines away as a macro.
+#pragma push_macro("emit")
+#undef emit
+#include <ghostty/vt.h>
+#pragma pop_macro("emit")
+
+class QSocketNotifier;
+
+// A shell in a pty, emulated by libghostty-vt (Ghostty's terminal core) and
+// painted as a QML item. Ghostty does the parsing, terminal state, scrollback
+// and key encoding; this class is the pty, the painting and the Qt input.
+class TerminalView : public QQuickPaintedItem
+{
+    Q_OBJECT
+
+    // Where the shell starts. Later changes are not sent to a running shell;
+    // see changeDirectory().
+    Q_PROPERTY(QString workingDirectory READ workingDirectory WRITE setWorkingDirectory
+                   NOTIFY workingDirectoryChanged)
+    // Where the shell says it is (OSC 7), empty if it never says.
+    Q_PROPERTY(QString shellDirectory READ shellDirectory NOTIFY shellDirectoryChanged)
+    Q_PROPERTY(QString title READ title NOTIFY titleChanged)
+    Q_PROPERTY(bool running READ running NOTIFY runningChanged)
+    Q_PROPERTY(QFont font READ font WRITE setFont NOTIFY fontChanged)
+    // Overrides on the desktop's monospace font: empty family / size 0 keep it.
+    Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontChanged)
+    Q_PROPERTY(qreal fontSize READ fontSize WRITE setFontSize NOTIFY fontChanged)
+    Q_PROPERTY(bool ligatures READ ligatures WRITE setLigatures NOTIFY fontChanged)
+    // "block", "bar" or "underline": the shape programs return to when they
+    // reset theirs (vim's insert mode sets its own).
+    Q_PROPERTY(QString cursorStyle READ cursorStyle WRITE setCursorStyle NOTIFY cursorStyleChanged)
+    Q_PROPERTY(bool cursorBlink READ cursorBlink WRITE setCursorBlink NOTIFY cursorStyleChanged)
+    // Lines of history kept above the screen.
+    Q_PROPERTY(int scrollbackLines READ scrollbackLines WRITE setScrollbackLines NOTIFY scrollbackLinesChanged)
+    Q_PROPERTY(QColor foreground READ foreground WRITE setForeground NOTIFY colorsChanged)
+    Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY colorsChanged)
+    // ANSI colours 0-15; anything but 16 colours keeps Ghostty's defaults.
+    Q_PROPERTY(QVariantList ansiPalette READ ansiPalette WRITE setAnsiPalette NOTIFY colorsChanged)
+    // Shortcuts the window keeps while the terminal has focus (the panel
+    // toggle, say); every other key goes to the shell, Ctrl+C included.
+    Q_PROPERTY(QStringList windowShortcuts MEMBER m_windowShortcuts)
+    // Whether OSC 9 / OSC 777 notifications go to the desktop's notification
+    // server; the notification signal fires either way.
+    Q_PROPERTY(bool desktopNotifications MEMBER m_desktopNotifications)
+    // Ctrl+PageUp/PageDown switch tabs only while there are tabs to switch
+    // to; otherwise they go to the program.
+    Q_PROPERTY(bool tabSwitching MEMBER m_tabSwitching)
+    // Where the link under the mouse goes (an OSC 8 link's real target, not
+    // its text), empty when there is none. Ctrl+click opens it.
+    Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged)
+    // Find in the screen and scrollback (ASCII letters match either case).
+    // Matches are highlighted in matchColor; the current one is stronger.
+    Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchChanged)
+    // Matches found, and which is current: 1 is the newest, 0 is none.
+    Q_PROPERTY(int searchMatchCount READ searchMatchCount NOTIFY searchChanged)
+    Q_PROPERTY(int searchMatchIndex READ searchMatchIndex NOTIFY searchChanged)
+    Q_PROPERTY(QColor matchColor MEMBER m_matchColor NOTIFY colorsChanged)
+    // The scrollback in rows, for a scrollbar: all of it, where the view
+    // starts, and how many rows it shows.
+    Q_PROPERTY(qreal scrollTotal READ scrollTotal NOTIFY scrollChanged)
+    Q_PROPERTY(qreal scrollOffset READ scrollOffset NOTIFY scrollChanged)
+    Q_PROPERTY(qreal scrollLength READ scrollLength NOTIFY scrollChanged)
+
+public:
+    explicit TerminalView(QQuickItem *parent = nullptr);
+    ~TerminalView() override;
+
+    QString workingDirectory() const { return m_workingDirectory; }
+    void setWorkingDirectory(const QString &dir);
+    QString shellDirectory() const { return m_shellDirectory; }
+    // Where the shell is now, from /proc (bash sends no OSC 7 by default,
+    // and output can fake one), else where it started.
+    Q_INVOKABLE QString currentDirectory() const;
+    QString title() const { return m_title; }
+    QString hoveredLink() const;
+    QString searchText() const { return m_searchText; }
+    void setSearchText(const QString &text);
+    int searchMatchCount() const { return m_searchCount; }
+    int searchMatchIndex() const { return m_searchIndex; }
+    qreal scrollTotal() const { return qreal(m_scrollbar.total); }
+    qreal scrollOffset() const { return qreal(m_scrollbar.offset); }
+    qreal scrollLength() const { return qreal(m_scrollbar.len); }
+    bool running() const { return m_ptyFd >= 0; }
+    QFont font() const { return m_font; }
+    void setFont(const QFont &font);
+    QString fontFamily() const { return m_fontFamily; }
+    void setFontFamily(const QString &family);
+    qreal fontSize() const { return m_fontSize; }
+    void setFontSize(qreal size);
+    bool ligatures() const { return m_ligatures; }
+    void setLigatures(bool on);
+    QString cursorStyle() const { return m_cursorStyle; }
+    void setCursorStyle(const QString &style);
+    bool cursorBlink() const { return m_cursorBlink; }
+    int scrollbackLines() const { return m_scrollbackLines; }
+    void setScrollbackLines(int lines);
+    void setCursorBlink(bool on);
+    // The desktop's monospace font (the portal's monospace-font-name), the
+    // default before any fontFamily/fontSize override.
+    static void setDesktopFont(const QString &family, qreal pointSize);
+    QColor foreground() const { return m_foreground; }
+    void setForeground(const QColor &color);
+    QColor background() const { return m_background; }
+    void setBackground(const QColor &color);
+    QVariantList ansiPalette() const { return m_palette; }
+    void setAnsiPalette(const QVariantList &palette);
+
+    // Starts the shell if it is not running.
+    Q_INVOKABLE void start();
+    // Types `text` into the shell as if pasted.
+    Q_INVOKABLE void sendText(const QString &text);
+    // Types a cd to `dir` if the shell is at its prompt (no program in the
+    // foreground) and returns whether it did.
+    Q_INVOKABLE bool changeDirectory(const QString &dir);
+    // The selected text, empty when nothing is selected.
+    Q_INVOKABLE QString selectedText() const;
+    Q_INVOKABLE void copy();
+    // Types the clipboard (or the primary selection) into the shell, as a
+    // bracketed paste when the shell asked for those.
+    // A paste that would run commands (a line break with bracketed paste
+    // off) emits unsafePaste instead; pasteText(text) then pastes it anyway.
+    Q_INVOKABLE void paste(bool primarySelection = false);
+    Q_INVOKABLE void pasteText(const QString &text);
+    // The next match up into older output, and back down; both wrap.
+    Q_INVOKABLE void findNext();
+    Q_INVOKABLE void findPrevious();
+    // Shows the scrollback from `row` down (0 is the oldest row).
+    Q_INVOKABLE void scrollToRow(qreal row);
+
+    void paint(QPainter *painter) override;
+
+signals:
+    void scrollbackLinesChanged();
+    void workingDirectoryChanged();
+    void shellDirectoryChanged();
+    void titleChanged();
+    void runningChanged();
+    void fontChanged();
+    void cursorStyleChanged();
+    void colorsChanged();
+    void finished();
+    void unsafePaste(const QString &text);
+    // BEL from the program. The view flashes and, in a window in the
+    // background, asks the compositor for attention itself.
+    void bell();
+    // A notification from the program (OSC 9, OSC 777), plain text, length
+    // capped, at most one a second.
+    void notification(const QString &title, const QString &body);
+    void hoveredLinkChanged();
+    void searchChanged();
+    void scrollChanged();
+    // Ctrl+Shift+F: the panel shows its find bar.
+    void searchRequested();
+    // Tab keys, for the panel: Ctrl+Shift+T, Ctrl+Shift+W, and
+    // Ctrl+PageDown / Ctrl+PageUp (step 1 / -1).
+    void newTabRequested();
+    void closeTabRequested();
+    void switchTabRequested(int step);
+    // Ctrl+click on a web or mail link (http, https, ftp, mailto).
+    void linkActivated(const QString &url);
+    // Ctrl+click on a file:// link to this machine: the folder it names, or
+    // the folder holding the file it names.
+    void folderActivated(const QString &path);
+
+protected:
+    bool event(QEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
+    void inputMethodEvent(QInputMethodEvent *event) override;
+    QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void hoverMoveEvent(QHoverEvent *event) override;
+    void hoverLeaveEvent(QHoverEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
+    void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
+
+private:
+    void readPty();
+    void writePty(const char *data, qsizetype len);
+    void stop();
+    void sendKey(QKeyEvent *event, GhosttyKeyAction action);
+    void applyCursorDefaults();
+    void updateBlinkTimer();
+    void reportFocus(bool focused);
+    void applyFontOverrides();
+    void updateCellSize();
+    void resizeGrid();
+    void applyColors();
+    GhosttyGridRef refAt(QPointF pos) const;
+    GhosttyGridRef refAtCell(int column, int row) const;
+    // A link on one viewport row: columns start..end, inclusive.
+    struct Link {
+        QString uri;
+        int row = -1;
+        int start = 0;
+        int end = -1;
+        bool operator==(const Link &o) const
+        {
+            return uri == o.uri && row == o.row && start == o.start && end == o.end;
+        }
+    };
+    Link linkAt(QPointF pos) const;
+    void updateHoverLink();
+    bool activateLink(const QString &uri);
+    void refreshSearch();
+    void updateScrollbar();
+    struct Image {
+        int layer = 0;
+        int z = 0;
+        QImage pixels;
+        QRectF target;
+        QRectF source;
+    };
+    QList<Image> imagesToDraw();
+    static QImage imagePixels(GhosttyKittyGraphics graphics, uint32_t id);
+    void scrollViewport(GhosttyTerminalScrollViewport scroll);
+    bool scrollKey(QKeyEvent *event);
+    void paintSearchMatches(QPainter *painter);
+    bool selectionGesture(GhosttySelectionGestureEvent event, QMouseEvent *mouse);
+    void clearSelection();
+    bool reportMouse(GhosttyMouseAction action, GhosttyMouseButton button, QPointF pos,
+                     Qt::KeyboardModifiers modifiers, Qt::MouseButtons held);
+
+    static void onWritePty(GhosttyTerminal, void *self, const uint8_t *data, size_t len);
+    static bool onSize(GhosttyTerminal, void *self, GhosttySizeReportSize *out);
+    static void onTitleChanged(GhosttyTerminal, void *self);
+    static void onPwdChanged(GhosttyTerminal, void *self);
+    static void onBell(GhosttyTerminal, void *self);
+    static void onClipboardWrite(GhosttyTerminal, void *self, const GhosttyClipboardWrite *write);
+    static void onDesktopNotification(GhosttyTerminal, void *self,
+                                      const GhosttyTerminalDesktopNotification *notification);
+
+    GhosttyTerminal m_terminal = nullptr;
+    GhosttyRenderState m_renderState = nullptr;
+    GhosttyRenderStateRowIterator m_rows = nullptr;
+    GhosttyRenderStateRowCells m_cells = nullptr;
+    GhosttyKeyEncoder m_keyEncoder = nullptr;
+    GhosttyKeyEvent m_keyEvent = nullptr;
+    GhosttySelectionGesture m_gesture = nullptr;
+    GhosttySelectionGestureEvent m_pressEvent = nullptr;
+    GhosttySelectionGestureEvent m_dragEvent = nullptr;
+    GhosttySelectionGestureEvent m_releaseEvent = nullptr;
+    bool m_hasSelection = false;
+    // What the program was last told under focus reporting (mode 1004), so
+    // a focus change Qt reports twice is sent once.
+    bool m_reportedFocus = false;
+    GhosttyMouseEncoder m_mouseEncoder = nullptr;
+    GhosttyMouseEvent m_mouseEvent = nullptr;
+
+    int m_ptyFd = -1;
+    qint64 m_pid = -1;
+    QSocketNotifier *m_notifier = nullptr;
+
+    QString m_workingDirectory;
+    QString m_shellDirectory;
+    QString m_title;
+    QStringList m_windowShortcuts;
+    bool m_desktopNotifications = true;
+    Link m_hoverLink;
+    GhosttyTerminalScrollbar m_scrollbar{0, 0, 0};
+    GhosttySearch m_search = nullptr;
+    QString m_searchText;
+    int m_searchCount = 0;
+    int m_searchIndex = 0;
+    QColor m_matchColor = QColor(0xf9, 0xe2, 0xaf);
+    // Output and scrolling move matches; the count and highlights catch up
+    // once per frame, not once per pty read.
+    QTimer m_searchRefresh;
+    QTimer m_directoryRefresh;
+    bool m_shellReportsDirectory = false;
+    QPointF m_hoverPos{-1, -1};
+    QElapsedTimer m_lastNotification;
+    QFont m_font;
+    QString m_fontFamily;
+    qreal m_fontSize = 0;
+    qreal m_zoom = 0;   // points added by Ctrl+= / Ctrl+-
+    bool m_ligatures = false;
+    QString m_cursorStyle = QStringLiteral("block");
+    bool m_cursorBlink = false;
+    int m_scrollbackLines = 10000;
+    bool m_tabSwitching = false;
+    bool m_linkClicked = false;
+    // Blink phase: the cursor is drawn while true. Flipped by m_blinkTimer,
+    // which runs only while focused with blinking on.
+    bool m_cursorShown = true;
+    QTimer m_blinkTimer;
+    // Visual bell: the view is tinted while this single-shot timer runs.
+    QTimer m_bellTimer;
+    // Kitty graphics: pixels of the images on screen per image ID, and the
+    // clock and timer that play animations.
+    struct CachedImage {
+        uint64_t generation = 0;
+        QImage pixels;
+    };
+    QHash<uint32_t, CachedImage> m_imageCache;
+    GhosttyRenderStateImageIterator m_images = nullptr;
+    QElapsedTimer m_clock;
+    QTimer m_animationTimer;
+    // Regular, bold, italic, bold italic: m_font fitted to the cell grid.
+    QFont m_cellFonts[4];
+    QColor m_foreground = QColor(0xcd, 0xd6, 0xf4);
+    QColor m_background = QColor(0x1e, 0x1e, 0x2e);
+    QVariantList m_palette;
+    qreal m_cellWidth = 8;
+    qreal m_cellHeight = 16;
+    qreal m_ascent = 12;
+    qreal m_capHeight = 9;
+    uint16_t m_cols = 80;
+    uint16_t m_rowCount = 24;
+    qreal m_scrollRemainder = 0;
+};

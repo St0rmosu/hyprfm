@@ -11,3 +11,10 @@ accent = "#bd93f9"
 success = "#50fa7b"
 warning = "#f1fa8c"
 error = "#ff5555"
+
+[terminal]
+# ANSI colours 0-15 of the built-in terminal, from the Dracula scheme.
+palette = [
+    "#21222c", "#ff5555", "#50fa7b", "#f1fa8c", "#bd93f9", "#ff79c6", "#8be9fd", "#f8f8f2",
+    "#6272a4", "#ff6e6e", "#69ff94", "#ffffa5", "#d6acff", "#ff92df", "#a4ffff", "#ffffff",
+]

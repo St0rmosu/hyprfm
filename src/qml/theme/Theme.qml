@@ -16,6 +16,7 @@ QtObject {
     property color success: theme.success
     property color warning: theme.warning
     property color error: theme.error
+    property var terminalPalette: theme.terminalPalette
 
     property int radiusSmall: config.radiusSmall
     property int radiusMedium: config.radiusMedium

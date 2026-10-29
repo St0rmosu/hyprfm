@@ -32,6 +32,15 @@ set(HYPRFM_SOURCES
 
 qt_add_executable(hyprfm ${HYPRFM_SOURCES})
 
+if(HYPRFM_TERMINAL)
+    target_sources(hyprfm PRIVATE terminal/terminalview.cpp terminal/terminalview.h)
+    target_link_libraries(hyprfm PRIVATE ghostty-vt-static util)
+    target_compile_definitions(hyprfm PRIVATE HYPRFM_TERMINAL)
+    # It undefines Qt's emit macro (Ghostty has an `emit` field); a unity
+    # batch would carry that into the next file.
+    set_source_files_properties(terminal/terminalview.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+endif()
+
 option(HYPRFM_ENABLE_PCH "Enable precompiled headers (faster builds)" ON)
 option(HYPRFM_ENABLE_UNITY_BUILD "Enable unity builds (faster clean builds)" ON)
 
@@ -180,6 +189,10 @@ list(APPEND hyprfm_qml_module_args
         qml/components/MissingDependenciesDialog.qml
         qml/components/SettingsPanel.qml
 )
+
+if(HYPRFM_TERMINAL)
+    list(APPEND hyprfm_qml_module_args qml/components/TerminalPanel.qml)
+endif()
 
 qt_add_qml_module(hyprfm ${hyprfm_qml_module_args})
 

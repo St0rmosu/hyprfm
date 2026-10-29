@@ -404,6 +404,33 @@ private slots:
         QCOMPARE(mgr2.splitOrientation(), QStringLiteral("horizontal"));
     }
 
+    void testTerminalFontSettings()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.path() + "/config.toml";
+        ConfigManager mgr(path);
+        QCOMPARE(mgr.terminalFontFamily(), QString());
+        QCOMPARE(mgr.terminalFontSize(), 0.0);
+        QCOMPARE(mgr.terminalLigatures(), false);
+        mgr.saveSettings({{"terminalFontFamily", "Maple Mono"}, {"terminalLigatures", true}});
+        mgr.saveSettings({{"terminalFontSize", 13}, {"terminalCursorStyle", "bar"}});
+        ConfigManager mgr2(path);
+        QCOMPARE(mgr2.terminalFontFamily(), QStringLiteral("Maple Mono"));
+        QCOMPARE(mgr2.terminalFontSize(), 13.0);
+        QCOMPARE(mgr2.terminalLigatures(), true);
+        QCOMPARE(mgr2.terminalCursorStyle(), QStringLiteral("bar"));
+        QCOMPARE(mgr2.terminalCursorBlink(), true);
+        mgr2.saveSettings({{"terminalCursorBlink", false}});
+        QCOMPARE(ConfigManager(path).terminalCursorBlink(), false);
+        QCOMPARE(mgr2.terminalScrollbackLines(), 10000);
+        mgr2.saveSettings({{"terminalScrollbackLines", 100000}});
+        QCOMPARE(ConfigManager(path).terminalScrollbackLines(), 100000);
+        mgr2.saveSettings({{"terminalScrollbackLines", -5}});   // clamped
+        QCOMPARE(ConfigManager(path).terminalScrollbackLines(), 0);
+        mgr2.saveSettings({{"terminalCursorStyle", "triangle"}});   // ignored
+        QCOMPARE(mgr2.terminalCursorStyle(), QStringLiteral("bar"));
+    }
+
     void testBookmarkNamesRoundTrip()
     {
         QTemporaryDir dir;

@@ -2,6 +2,7 @@
 #include <QTemporaryDir>
 #include <QDir>
 #include <QFile>
+#include <QDir>
 #include <QSignalSpy>
 #include "services/themeloader.h"
 
@@ -47,6 +48,34 @@ private slots:
         QCOMPARE(loader.color("success"), QColor("#a6e3a1"));
         QCOMPARE(loader.color("warning"), QColor("#f9e2af"));
         QCOMPARE(loader.color("error"), QColor("#f38ba8"));
+    }
+
+    void testTerminalPalette()
+    {
+        ThemeLoader loader;
+        loader.loadTheme("catppuccin-mocha", QStringList{QString(THEMES_DIR)});
+        const QVariantList palette = loader.terminalPalette();
+        QCOMPARE(palette.size(), 16);
+        QCOMPARE(palette.at(1).value<QColor>(), QColor("#f38ba8"));
+        QCOMPARE(palette.at(15).value<QColor>(), QColor("#bac2de"));
+
+        // Every bundled theme carries a full palette.
+        for (const QString &name : QDir(THEMES_DIR).entryList({"*.toml"})) {
+            loader.loadTheme(QDir(THEMES_DIR).filePath(name), {});
+            QVERIFY2(loader.terminalPalette().size() == 16, qPrintable(name));
+        }
+
+        // A short or broken palette is dropped whole.
+        QTemporaryDir dir;
+        for (const QByteArray &body : {QByteArray("[terminal]\npalette = [\"#000000\"]\n"),
+                                       QByteArray("[terminal]\npalette = [" + QByteArray("\"#000000\", ").repeated(15) + "\"nope\"]\n")}) {
+            QFile f(dir.path() + "/t.toml");
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            f.write(body);
+            f.close();
+            loader.loadTheme(f.fileName(), {});
+            QVERIFY(loader.terminalPalette().isEmpty());
+        }
     }
 
     void testLoadCustomTheme()
@@ -263,6 +292,38 @@ private slots:
         QVERIFY(loader.color("mantle").lightness() < loader.color("base").lightness());
         QVERIFY(loader.color("crust").lightness() < loader.color("mantle").lightness());
         QVERIFY(loader.color("surface").lightness() > loader.color("overlay").lightness());
+    }
+
+    // pywal's sixteen colours become the terminal palette; without all
+    // sixteen the previous theme's palette must not linger.
+    void testPywalThemeSetsTerminalPalette()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath("colors.json");
+        QByteArray colors;
+        for (int i = 0; i < 16; ++i)
+            colors += QStringLiteral("%1\"color%2\": \"#%3%3%3\"").arg(i ? ", " : "").arg(i)
+                          .arg(i * 16, 2, 16, QLatin1Char('0')).toUtf8();
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("{\"special\": {\"background\": \"#000000\", \"foreground\": \"#ffffff\"},"
+                   " \"colors\": {" + colors + "}}");
+        file.close();
+
+        ThemeLoader loader;
+        loader.loadTheme(path, {});
+        const QVariantList palette = loader.terminalPalette();
+        QCOMPARE(palette.size(), 16);
+        QCOMPARE(palette.at(0).value<QColor>(), QColor("#000000"));
+        QCOMPARE(palette.at(15).value<QColor>(), QColor("#f0f0f0"));
+
+        loader.loadTheme("catppuccin-mocha", QStringList{QString(THEMES_DIR)});
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write("{\"special\": {\"background\": \"#000000\", \"foreground\": \"#ffffff\"},"
+                   " \"colors\": {\"color1\": \"#ff0000\"}}");
+        file.close();
+        loader.loadTheme(path, {});
+        QVERIFY(loader.terminalPalette().isEmpty());
     }
 };
 

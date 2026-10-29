@@ -39,6 +39,7 @@ Item {
     signal restoreRequested(var paths)
     signal deleteRequested(var paths)
     signal openInTerminalRequested(string path)
+    signal openInOtherTerminalRequested(string path)
     signal newFolderRequested(string parentPath)
     signal newFileRequested(string parentPath)
     signal selectAllRequested()
@@ -57,6 +58,15 @@ Item {
     FontMetrics { id: itemFont; font.pointSize: Theme.fontNormal }
     FontMetrics { id: smallFont; font.pointSize: Theme.fontSmall }
     FontMetrics { id: subShortcutFont; font.pixelSize: 11 }
+
+    // With the built-in terminal compiled in, menus offer the kind of
+    // terminal Open in Terminal does not use (see builtin_terminal).
+    function otherTerminalItems() {
+        if (typeof hyprfmBuiltinTerminal === "undefined" || !hyprfmBuiltinTerminal)
+            return []
+        return [{ text: config.builtinTerminal ? "Open in External Terminal" : "Open in Built-in Terminal",
+                  shortcut: "", action: "terminal_other", icon: "Terminal" }]
+    }
 
     function itemRowWidth(item) {
         var w = 24 + 16 + 8 + itemFont.advanceWidth(item.text || "")
@@ -690,8 +700,10 @@ Item {
                         items.push({ text: "Open With\u2026", shortcut: "", action: "chooseapp_direct", icon: "ExternalLink", mimeType: mime })
                 }
             }
-            if (targetIsDir && !isTrashView && !remoteContext)
+            if (targetIsDir && !isTrashView && !remoteContext) {
                 items.push({ text: "Open in Terminal", shortcut: "", action: "terminal", icon: "Terminal" })
+                items.push(...otherTerminalItems())
+            }
             if (!targetIsDir && !isTrashView && !remoteContext && fileOps.isExecutable(targetPath)) {
                 items.push({ text: "Run", shortcut: "", action: "run", icon: "Play" })
                 items.push({ text: "Run in Terminal", shortcut: "", action: "run_terminal", icon: "Terminal" })
@@ -791,8 +803,10 @@ Item {
                     items.push({ text: "Save Split to Sidebar", shortcut: "", action: "save_current_split", icon: "Bookmark" })
                 }
                 items.push({ separator: true })
-                if (!remoteContext)
+                if (!remoteContext) {
                     items.push({ text: "Open in Terminal", shortcut: "", action: "terminal", icon: "Terminal" })
+                    items.push(...otherTerminalItems())
+                }
                 items.push({ text: "Properties", shortcut: "", action: "properties", icon: "Info" })
             } else {
                 items.push({ separator: true })
@@ -822,6 +836,7 @@ Item {
         case "paste": pasteRequested(effectiveDir); break
         case "selectall": selectAllRequested(); break
         case "terminal": openInTerminalRequested(effectiveDir); break
+        case "terminal_other": openInOtherTerminalRequested(effectiveDir); break
         case "run": fileOps.runExecutable(targetPath, false); break
         case "run_terminal": fileOps.runExecutable(targetPath, true); break
         case "newfolder": newFolderRequested(effectiveDir); break

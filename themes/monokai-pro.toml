@@ -11,3 +11,10 @@ accent = "#ff6188"
 success = "#a9dc76"
 warning = "#ffd866"
 error = "#ff6188"
+
+[terminal]
+# ANSI colours 0-15 of the built-in terminal, from the Monokai Pro scheme.
+palette = [
+    "#2d2a2e", "#ff6188", "#a9dc76", "#ffd866", "#fc9867", "#ab9df2", "#78dce8", "#fcfcfa",
+    "#727072", "#ff6188", "#a9dc76", "#ffd866", "#fc9867", "#ab9df2", "#78dce8", "#fcfcfa",
+]

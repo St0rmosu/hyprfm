@@ -59,6 +59,9 @@
 #include "providers/thumbnailprovider.h"
 #include "providers/iconprovider.h"
 #include "providers/pdfpreviewprovider.h"
+#ifdef HYPRFM_TERMINAL
+#include "terminal/terminalview.h"
+#endif
 #include <QIcon>
 #include <QEvent>
 #include <functional>
@@ -397,6 +400,10 @@ private:
 struct AppWindow : public QObject
 {
     using QObject::QObject;
+    // The window goes first: children are deleted in creation order, so the
+    // models made before it would vanish under its live bindings ("Cannot
+    // read property 'activeTab' of null" on every close).
+    ~AppWindow() override { delete window; }
     TabListModel *tabModel = nullptr;
     SessionState *sessionState = nullptr;
     QQuickWindow *window = nullptr;
@@ -438,6 +445,8 @@ struct DesktopSettings
     QString iconTheme;
     QString fontFamily;
     qreal fontPointSize = 0;
+    QString monospaceFamily;
+    qreal monospacePointSize = 0;
     QString fontHinting;   // none / slight / medium / full, as the desktop sets it
 };
 
@@ -486,20 +495,24 @@ DesktopSettings readDesktopSettings()
     settings.iconTheme = readKey(QStringLiteral("icon-theme")).trimmed();
     settings.fontHinting = readKey(QStringLiteral("font-hinting")).trimmed();
 
-    // font-name is Pango's format: family, optional style words, then the size
-    // ("Adwaita Sans 11", "Cantarell Bold 12").
-    const QString fontName = readKey(QStringLiteral("font-name")).trimmed();
-    if (!fontName.isEmpty()) {
+    // Font names are Pango's format: family, optional style words, then the
+    // size ("Adwaita Sans 11", "Cantarell Bold 12").
+    const auto readFont = [&](const QString &key, QString &family, qreal &pointSize) {
+        const QString fontName = readKey(key).trimmed();
+        if (fontName.isEmpty())
+            return;
         const qsizetype lastSpace = fontName.lastIndexOf(QLatin1Char(' '));
         bool isNumber = false;
         const qreal size = lastSpace > 0 ? fontName.mid(lastSpace + 1).toDouble(&isNumber) : 0;
         if (isNumber && size > 0) {
-            settings.fontFamily = fontName.left(lastSpace).trimmed();
-            settings.fontPointSize = size;
+            family = fontName.left(lastSpace).trimmed();
+            pointSize = size;
         } else {
-            settings.fontFamily = fontName;
+            family = fontName;
         }
-    }
+    };
+    readFont(QStringLiteral("font-name"), settings.fontFamily, settings.fontPointSize);
+    readFont(QStringLiteral("monospace-font-name"), settings.monospaceFamily, settings.monospacePointSize);
     return settings;
 }
 
@@ -565,6 +578,15 @@ accent  = "#89b4fa"  # selection, focus ring, links
 success = "#a6e3a1"  # completed operations
 warning = "#f9e2af"  # warnings
 error   = "#f38ba8"  # errors, destructive actions
+
+# ANSI colours 0-15 of the built-in terminal: black, red, green, yellow, blue,
+# magenta, cyan, white, then the bright versions. All 16 or none; without
+# them the terminal uses its default palette.
+[terminal]
+palette = [
+    "#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#a6adc8",
+    "#585b70", "#f37799", "#89d88b", "#ebd391", "#74a8fc", "#f2aede", "#6bd7ca", "#bac2de",
+]
 )";
 
 } // namespace
@@ -704,9 +726,23 @@ int main(int argc, char *argv[])
     // disk label, as it happened). The font database and FreeType are shared
     // across threads under their own locks - only QFontCache is per-thread -
     // so doing it on a worker leaves the GUI thread ~1 ms of engine setup.
-    std::thread([] {
+    // The warm-up workers are joined when main() returns, whatever the path:
+    // a detached one still inside FreeType or vkCreateInstance while exit()
+    // tears the process down crashed it ("free(): invalid size" when Main.qml
+    // failed to load). Declared after app, so they finish before it goes.
+    struct Workers {
+        std::thread font, vulkan;
+        ~Workers()
+        {
+            if (font.joinable())
+                font.join();
+            if (vulkan.joinable())
+                vulkan.join();
+        }
+    } workers;
+    workers.font = std::thread([] {
         QFontMetricsF(QFont()).horizontalAdvance(QStringLiteral("0123456789 GB free of"));
-    }).detach();
+    });
 
     // One process serves every window. Launching HyprFM while it runs hands
     // the request to it over a per-uid unix socket: `hyprfm <path>` adds a tab
@@ -762,11 +798,10 @@ int main(int argc, char *argv[])
     }
 
     // Only once this process knows it will show a window: a launch that hands
-    // off returns from main() at once, and NVIDIA's driver aborts in exit()
-    // when a thread is still inside vkCreateInstance.
+    // off returns from main() at once and should not wait on a driver.
 #if defined(Q_OS_LINUX) && QT_CONFIG(vulkan)
     if (renderer.usesVulkan())
-        std::thread(warmVulkanDriver).detach();
+        workers.vulkan = std::thread(warmVulkanDriver);
 #endif
 
     QQuickStyle::setStyle("Basic");
@@ -1012,6 +1047,14 @@ int main(int argc, char *argv[])
     shared->setContextProperty("rcloneService", rcloneService);
     shared->setContextProperty("runtimeFeatures", runtimeFeatures);
     shared->setContextProperty("dependencies", dependencies);
+#ifdef HYPRFM_TERMINAL
+    // Registered here rather than with QML_ELEMENT: the generated type
+    // registration does not include the header, so it only compiled when a
+    // unity batch happened to.
+    qmlRegisterType<TerminalView>("HyprFM", 1, 0, "TerminalView");
+    TerminalView::setDesktopFont(desktop.monospaceFamily, desktop.monospacePointSize);
+    shared->setContextProperty("hyprfmBuiltinTerminal", true);
+#endif
 
     // The main window, compiled once and instantiated per window. The qrc
     // module is qmlcachegen-compiled; the installed on-disk copy is only the

@@ -83,6 +83,13 @@ Window {
     property bool draftHiddenLast: config.hiddenLast
     property bool draftRightClickToEditPath: config.rightClickToEditPath
     property bool draftSingleClickOpensFolders: config.singleClickOpensFolders
+    property bool draftBuiltinTerminal: config.builtinTerminal
+    property string draftTerminalFontFamily: config.terminalFontFamily
+    property real draftTerminalFontSize: config.terminalFontSize
+    property bool draftTerminalLigatures: config.terminalLigatures
+    property string draftTerminalCursorStyle: config.terminalCursorStyle
+    property bool draftTerminalCursorBlink: config.terminalCursorBlink
+    property int draftTerminalScrollbackLines: config.terminalScrollbackLines
     property bool draftDependencyStartupCheck: config.dependencyStartupCheck
     property bool draftSidebarVisible: currentSidebarVisible
     // Must stay in sync with the quick-access entries in Sidebar.qml.
@@ -272,6 +279,12 @@ Window {
         draftHiddenLast = false
         draftRightClickToEditPath = true
         draftSingleClickOpensFolders = false
+        draftBuiltinTerminal = false
+        draftTerminalFontFamily = ""
+        draftTerminalFontSize = 0
+        draftTerminalLigatures = false
+        draftTerminalCursorStyle = "block"
+        draftTerminalCursorBlink = true
         draftDependencyStartupCheck = true
         draftSidebarVisible = true
         draftHiddenQuickAccess = []
@@ -322,6 +335,13 @@ Window {
             draftHiddenLast = config.hiddenLast
             draftRightClickToEditPath = config.rightClickToEditPath
             draftSingleClickOpensFolders = config.singleClickOpensFolders
+            draftBuiltinTerminal = config.builtinTerminal
+            draftTerminalFontFamily = config.terminalFontFamily
+            draftTerminalFontSize = config.terminalFontSize
+            draftTerminalLigatures = config.terminalLigatures
+            draftTerminalCursorStyle = config.terminalCursorStyle
+            draftTerminalCursorBlink = config.terminalCursorBlink
+            draftTerminalScrollbackLines = config.terminalScrollbackLines
             draftDependencyStartupCheck = config.dependencyStartupCheck
             draftSidebarVisible = currentSidebarVisible
             draftHiddenQuickAccess = config.hiddenQuickAccess
@@ -398,6 +418,13 @@ Window {
             hiddenLast: draftHiddenLast,
             rightClickToEditPath: draftRightClickToEditPath,
             singleClickOpensFolders: draftSingleClickOpensFolders,
+            builtinTerminal: draftBuiltinTerminal,
+            terminalFontFamily: draftTerminalFontFamily,
+            terminalFontSize: draftTerminalFontSize,
+            terminalLigatures: draftTerminalLigatures,
+            terminalCursorStyle: draftTerminalCursorStyle,
+            terminalCursorBlink: draftTerminalCursorBlink,
+            terminalScrollbackLines: draftTerminalScrollbackLines,
             dependencyStartupCheck: draftDependencyStartupCheck,
             sidebarVisible: draftSidebarVisible,
             hiddenQuickAccess: draftHiddenQuickAccess,
@@ -735,6 +762,105 @@ Window {
                 checked: root.draftSingleClickOpensFolders
                 onToggled: (value) => {
                     root.draftSingleClickOpensFolders = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Toggle {
+                Layout.fillWidth: true
+                visible: typeof hyprfmBuiltinTerminal !== "undefined" && hyprfmBuiltinTerminal
+                label: "Open in Terminal uses the built-in terminal"
+                checked: root.draftBuiltinTerminal
+                onToggled: (value) => {
+                    root.draftBuiltinTerminal = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Dropdown {
+                id: terminalFontDropdown
+                Layout.fillWidth: true
+                visible: typeof hyprfmBuiltinTerminal !== "undefined" && hyprfmBuiltinTerminal
+                label: "Terminal font"
+                // Only monospace families: the terminal draws on a cell grid.
+                model: visible ? [root.systemFontLabel].concat(config.availableMonospaceFonts) : []
+                previewFont: true
+                currentIndex: root.optionIndex(model, root.draftTerminalFontFamily === "" ? root.systemFontLabel : root.draftTerminalFontFamily, 0)
+                onSelected: (_, value) => {
+                    root.draftTerminalFontFamily = value === root.systemFontLabel ? "" : value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Slider {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                // The label column is 140 px: a longer one runs under the
+                // slider. 0 follows the desktop's monospace size.
+                label: "Terminal font size"
+                from: 0
+                to: 32
+                stepSize: 1
+                showValue: true
+                value: root.draftTerminalFontSize
+                onMoved: (value) => {
+                    root.draftTerminalFontSize = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Toggle {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                label: "Terminal ligatures (=> != -> as one symbol)"
+                checked: root.draftTerminalLigatures
+                onToggled: (value) => {
+                    root.draftTerminalLigatures = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Dropdown {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                label: "Terminal cursor"
+                model: ["Block", "Bar", "Underline"]
+                currentIndex: Math.max(0, ["block", "bar", "underline"].indexOf(root.draftTerminalCursorStyle))
+                onSelected: (index, _) => {
+                    root.draftTerminalCursorStyle = ["block", "bar", "underline"][index]
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Toggle {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                label: "Blinking terminal cursor"
+                checked: root.draftTerminalCursorBlink
+                onToggled: (value) => {
+                    root.draftTerminalCursorBlink = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Dropdown {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                readonly property var lines: [1000, 10000, 100000, 1000000]
+                label: "Terminal scrollback"
+                model: ["1,000 lines", "10,000 lines", "100,000 lines", "1,000,000 lines"]
+                // A count set by hand in config.toml shows the nearest step.
+                currentIndex: {
+                    let best = 0
+                    for (let i = 1; i < lines.length; ++i) {
+                        if (Math.abs(lines[i] - root.draftTerminalScrollbackLines)
+                                < Math.abs(lines[best] - root.draftTerminalScrollbackLines))
+                            best = i
+                    }
+                    return best
+                }
+                onSelected: (index, _) => {
+                    root.draftTerminalScrollbackLines = lines[index]
                     root.applySettingsNow()
                 }
             }

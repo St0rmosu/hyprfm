@@ -167,6 +167,13 @@ jobs:
           echo "=== wayland-graphics-integration-client after install ==="
           ls "$QT_PREFIX/plugins/wayland-graphics-integration-client/" || true
 
+      # The built-in terminal builds libghostty-vt with Zig; without zig on
+      # PATH it is left out of the build.
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+
       - name: Build
         run: |
           # HYPRFM_ENABLE_QML_CACHEGEN=ON forces qmlcachegen to compile QML
