@@ -140,6 +140,11 @@ Item {
         flickableDirection: Flickable.HorizontalFlick
         clip: true
 
+        // Long paths overflow: keep the current folder, the end, in view.
+        function showEnd() { contentX = Math.max(0, contentWidth - width) }
+        onContentWidthChanged: showEnd()
+        onWidthChanged: showEnd()
+
         Row {
             id: segmentsRow
             height: parent.height
