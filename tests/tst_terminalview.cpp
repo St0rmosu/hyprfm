@@ -519,6 +519,35 @@ private slots:
         QCOMPARE(bell.count(), 1);
     }
 
+    // A program that asked for focus reports (mode 1004) reads CSI I when
+    // the view gains focus and CSI O when it loses it, once each.
+    void testFocusIsReported()
+    {
+        QTemporaryDir dir;
+        QQuickWindow window;
+        window.resize(320, 120);
+        TerminalView view(window.contentItem());
+        view.setSize(QSizeF(320, 120));
+        QQuickItem other(window.contentItem());
+        other.setFlag(QQuickItem::ItemIsFocusScope);
+        other.setActiveFocusOnTab(true);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        view.start();
+        const QString out = dir.filePath("focus");
+        view.sendText(QStringLiteral("printf '\\033[?1004h'; stty -icanon min 1; dd bs=1 count=6 of='%1' 2>/dev/null\n").arg(out));
+        QTest::qWait(500);
+        view.forceActiveFocus();
+        QTRY_VERIFY(view.hasActiveFocus());
+        view.forceActiveFocus();   // no second report
+        other.forceActiveFocus();
+        QTRY_VERIFY(!view.hasActiveFocus());
+        QTRY_COMPARE_WITH_TIMEOUT(QFileInfo(out).size(), 6, 5000);
+        QFile file(out);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), QByteArray("\x1b[I\x1b[O"));
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;

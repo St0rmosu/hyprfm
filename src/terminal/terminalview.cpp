@@ -679,9 +679,29 @@ bool TerminalView::event(QEvent *event)
         event->accept();
         return true;
     }
-    if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)
+    if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut) {
         updateBlinkTimer();   // also repaints: the cursor is filled only while focused
+        reportFocus(event->type() == QEvent::FocusIn);
+    }
     return QQuickPaintedItem::event(event);
+}
+
+// Programs that turned on focus reporting (vim, tmux, neovim) hear CSI I
+// and CSI O as the terminal gains and loses focus, the window's included.
+void TerminalView::reportFocus(bool focused)
+{
+    if (m_ptyFd < 0 || focused == m_reportedFocus)
+        return;
+    m_reportedFocus = focused;
+    GhosttyTerminalModeConfig mode{GHOSTTY_MODE_FOCUS_EVENT, false};
+    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_MODE, &mode);
+    if (!mode.value)
+        return;
+    char out[8];
+    size_t written = 0;
+    if (ghostty_focus_encode(focused ? GHOSTTY_FOCUS_GAINED : GHOSTTY_FOCUS_LOST, out, sizeof out, &written)
+        == GHOSTTY_SUCCESS)
+        writePty(out, qsizetype(written));
 }
 
 void TerminalView::sendKey(QKeyEvent *event, GhosttyKeyAction action)

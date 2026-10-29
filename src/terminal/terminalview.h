@@ -131,6 +131,7 @@ private:
     void sendKey(QKeyEvent *event, GhosttyKeyAction action);
     void applyCursorDefaults();
     void updateBlinkTimer();
+    void reportFocus(bool focused);
     void applyFontOverrides();
     void updateCellSize();
     void resizeGrid();
@@ -158,6 +159,9 @@ private:
     GhosttySelectionGestureEvent m_dragEvent = nullptr;
     GhosttySelectionGestureEvent m_releaseEvent = nullptr;
     bool m_hasSelection = false;
+    // What the program was last told under focus reporting (mode 1004), so
+    // a focus change Qt reports twice is sent once.
+    bool m_reportedFocus = false;
     GhosttyMouseEncoder m_mouseEncoder = nullptr;
     GhosttyMouseEvent m_mouseEvent = nullptr;
 
