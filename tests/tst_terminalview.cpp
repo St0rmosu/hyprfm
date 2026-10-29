@@ -759,6 +759,19 @@ private slots:
         QCOMPARE(view.scrollOffset() + view.scrollLength(), view.scrollTotal());
     }
 
+    // History past scrollbackLines is dropped (by whole pages, so loosely).
+    void testScrollbackLimit()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setScrollbackLines(1000);
+        view.start();
+        view.sendText(QStringLiteral("seq 1 20000; echo done; sleep 5\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(view.scrollTotal() > 500, 5000);
+        QTest::qWait(1500);
+        QVERIFY2(view.scrollTotal() < 5000, qPrintable(QString::number(view.scrollTotal())));
+    }
+
     // Ctrl+= and Ctrl+- zoom by a point within 4-72, Ctrl+0 resets.
     void testZoomKeys()
     {

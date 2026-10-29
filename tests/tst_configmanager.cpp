@@ -374,6 +374,11 @@ private slots:
         QCOMPARE(mgr2.terminalCursorBlink(), true);
         mgr2.saveSettings({{"terminalCursorBlink", false}});
         QCOMPARE(ConfigManager(path).terminalCursorBlink(), false);
+        QCOMPARE(mgr2.terminalScrollbackLines(), 10000);
+        mgr2.saveSettings({{"terminalScrollbackLines", 100000}});
+        QCOMPARE(ConfigManager(path).terminalScrollbackLines(), 100000);
+        mgr2.saveSettings({{"terminalScrollbackLines", -5}});   // clamped
+        QCOMPARE(ConfigManager(path).terminalScrollbackLines(), 0);
         mgr2.saveSettings({{"terminalCursorStyle", "triangle"}});   // ignored
         QCOMPARE(mgr2.terminalCursorStyle(), QStringLiteral("bar"));
     }

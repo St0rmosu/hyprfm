@@ -31,6 +31,7 @@ class ConfigManager : public QObject
     Q_PROPERTY(bool terminalLigatures READ terminalLigatures NOTIFY configChanged)
     Q_PROPERTY(QString terminalCursorStyle READ terminalCursorStyle NOTIFY configChanged)
     Q_PROPERTY(bool terminalCursorBlink READ terminalCursorBlink NOTIFY configChanged)
+    Q_PROPERTY(int terminalScrollbackLines READ terminalScrollbackLines NOTIFY configChanged)
     Q_PROPERTY(bool dependencyStartupCheck READ dependencyStartupCheck NOTIFY configChanged)
     Q_PROPERTY(QString sortBy READ sortBy NOTIFY configChanged)
     Q_PROPERTY(bool sortAscending READ sortAscending NOTIFY configChanged)
@@ -102,6 +103,7 @@ public:
     bool terminalLigatures() const { return m_terminalLigatures; }
     QString terminalCursorStyle() const { return m_terminalCursorStyle; }
     bool terminalCursorBlink() const { return m_terminalCursorBlink; }
+    int terminalScrollbackLines() const { return m_terminalScrollbackLines; }
     bool dependencyStartupCheck() const;
     QString sortBy() const;
     bool sortAscending() const;
@@ -217,6 +219,7 @@ private:
     bool m_terminalLigatures = false;
     QString m_terminalCursorStyle = QStringLiteral("block");
     bool m_terminalCursorBlink = true;
+    int m_terminalScrollbackLines = 10000;
     bool m_dependencyStartupCheck;
     QString m_sortBy;
     bool m_sortAscending;

@@ -327,6 +327,7 @@ void ConfigManager::setDefaults()
     m_terminalLigatures = false;
     m_terminalCursorStyle = QStringLiteral("block");
     m_terminalCursorBlink = true;
+    m_terminalScrollbackLines = 10000;
     m_sortBy = "name";
     m_sortAscending = true;
     m_rememberSortPerFolder = true;
@@ -420,6 +421,9 @@ void ConfigManager::loadConfig()
             m_terminalLigatures = *v;
         if (auto v = config["terminal"]["cursor_blink"].value<bool>())
             m_terminalCursorBlink = *v;
+        // ponytail: capped at a million lines, a few hundred MB at worst.
+        if (auto v = config["terminal"]["scrollback_lines"].value<int64_t>())
+            m_terminalScrollbackLines = int(std::clamp<int64_t>(*v, 0, 1000000));
         if (auto v = config["terminal"]["cursor_style"].value<std::string>()) {
             const QString style = QString::fromStdString(*v).trimmed().toLower();
             if (style == "block" || style == "bar" || style == "underline")
@@ -725,6 +729,8 @@ ligatures = false
 # block, bar or underline. Programs can still change it (vim's insert mode).
 cursor_style = "block"
 cursor_blink = true
+# Lines of history kept above the screen (up to 1000000).
+scrollback_lines = 10000
 
 [sidebar]
 # "left" | "right"
@@ -1398,7 +1404,7 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
 
     if (settings.contains("terminalFontFamily") || settings.contains("terminalFontSize")
         || settings.contains("terminalLigatures") || settings.contains("terminalCursorStyle")
-        || settings.contains("terminalCursorBlink")) {
+        || settings.contains("terminalCursorBlink") || settings.contains("terminalScrollbackLines")) {
         if (settings.contains("terminalFontFamily"))
             m_terminalFontFamily = settings.value("terminalFontFamily").toString().trimmed();
         if (settings.contains("terminalFontSize"))
@@ -1407,6 +1413,8 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
             m_terminalLigatures = settings.value("terminalLigatures").toBool();
         if (settings.contains("terminalCursorBlink"))
             m_terminalCursorBlink = settings.value("terminalCursorBlink").toBool();
+        if (settings.contains("terminalScrollbackLines"))
+            m_terminalScrollbackLines = qBound(0, settings.value("terminalScrollbackLines").toInt(), 1000000);
         const QString cursorStyle = settings.value("terminalCursorStyle").toString();
         if (cursorStyle == "block" || cursorStyle == "bar" || cursorStyle == "underline")
             m_terminalCursorStyle = cursorStyle;
@@ -1418,6 +1426,7 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
         terminal.insert_or_assign("ligatures", m_terminalLigatures);
         terminal.insert_or_assign("cursor_style", m_terminalCursorStyle.toStdString());
         terminal.insert_or_assign("cursor_blink", m_terminalCursorBlink);
+        terminal.insert_or_assign("scrollback_lines", int64_t(m_terminalScrollbackLines));
         config.insert_or_assign("terminal", std::move(terminal));
     }
 

@@ -40,6 +40,8 @@ class TerminalView : public QQuickPaintedItem
     // reset theirs (vim's insert mode sets its own).
     Q_PROPERTY(QString cursorStyle READ cursorStyle WRITE setCursorStyle NOTIFY cursorStyleChanged)
     Q_PROPERTY(bool cursorBlink READ cursorBlink WRITE setCursorBlink NOTIFY cursorStyleChanged)
+    // Lines of history kept above the screen.
+    Q_PROPERTY(int scrollbackLines READ scrollbackLines WRITE setScrollbackLines NOTIFY scrollbackLinesChanged)
     Q_PROPERTY(QColor foreground READ foreground WRITE setForeground NOTIFY colorsChanged)
     Q_PROPERTY(QColor background READ background WRITE setBackground NOTIFY colorsChanged)
     // ANSI colours 0-15; anything but 16 colours keeps Ghostty's defaults.
@@ -94,6 +96,8 @@ public:
     QString cursorStyle() const { return m_cursorStyle; }
     void setCursorStyle(const QString &style);
     bool cursorBlink() const { return m_cursorBlink; }
+    int scrollbackLines() const { return m_scrollbackLines; }
+    void setScrollbackLines(int lines);
     void setCursorBlink(bool on);
     // The desktop's monospace font (the portal's monospace-font-name), the
     // default before any fontFamily/fontSize override.
@@ -130,6 +134,7 @@ public:
     void paint(QPainter *painter) override;
 
 signals:
+    void scrollbackLinesChanged();
     void workingDirectoryChanged();
     void shellDirectoryChanged();
     void titleChanged();
@@ -260,6 +265,7 @@ private:
     bool m_ligatures = false;
     QString m_cursorStyle = QStringLiteral("block");
     bool m_cursorBlink = false;
+    int m_scrollbackLines = 10000;
     // Blink phase: the cursor is drawn while true. Flipped by m_blinkTimer,
     // which runs only while focused with blinking on.
     bool m_cursorShown = true;

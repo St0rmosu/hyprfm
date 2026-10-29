@@ -88,6 +88,7 @@ Window {
     property bool draftTerminalLigatures: config.terminalLigatures
     property string draftTerminalCursorStyle: config.terminalCursorStyle
     property bool draftTerminalCursorBlink: config.terminalCursorBlink
+    property int draftTerminalScrollbackLines: config.terminalScrollbackLines
     property bool draftDependencyStartupCheck: config.dependencyStartupCheck
     property bool draftSidebarVisible: currentSidebarVisible
     // Must stay in sync with the quick-access entries in Sidebar.qml.
@@ -337,6 +338,7 @@ Window {
             draftTerminalLigatures = config.terminalLigatures
             draftTerminalCursorStyle = config.terminalCursorStyle
             draftTerminalCursorBlink = config.terminalCursorBlink
+            draftTerminalScrollbackLines = config.terminalScrollbackLines
             draftDependencyStartupCheck = config.dependencyStartupCheck
             draftSidebarVisible = currentSidebarVisible
             draftHiddenQuickAccess = config.hiddenQuickAccess
@@ -418,6 +420,7 @@ Window {
             terminalLigatures: draftTerminalLigatures,
             terminalCursorStyle: draftTerminalCursorStyle,
             terminalCursorBlink: draftTerminalCursorBlink,
+            terminalScrollbackLines: draftTerminalScrollbackLines,
             dependencyStartupCheck: draftDependencyStartupCheck,
             sidebarVisible: draftSidebarVisible,
             hiddenQuickAccess: draftHiddenQuickAccess,
@@ -820,6 +823,28 @@ Window {
                 checked: root.draftTerminalCursorBlink
                 onToggled: (value) => {
                     root.draftTerminalCursorBlink = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Dropdown {
+                Layout.fillWidth: true
+                visible: terminalFontDropdown.visible
+                readonly property var lines: [1000, 10000, 100000, 1000000]
+                label: "Terminal scrollback"
+                model: ["1,000 lines", "10,000 lines", "100,000 lines", "1,000,000 lines"]
+                // A count set by hand in config.toml shows the nearest step.
+                currentIndex: {
+                    let best = 0
+                    for (let i = 1; i < lines.length; ++i) {
+                        if (Math.abs(lines[i] - root.draftTerminalScrollbackLines)
+                                < Math.abs(lines[best] - root.draftTerminalScrollbackLines))
+                            best = i
+                    }
+                    return best
+                }
+                onSelected: (index, _) => {
+                    root.draftTerminalScrollbackLines = lines[index]
                     root.applySettingsNow()
                 }
             }

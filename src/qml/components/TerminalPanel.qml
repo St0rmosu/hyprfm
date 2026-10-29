@@ -54,6 +54,7 @@ Item {
         ligatures: config.terminalLigatures
         cursorStyle: config.terminalCursorStyle
         cursorBlink: config.terminalCursorBlink
+        scrollbackLines: config.terminalScrollbackLines
         windowShortcuts: panel.windowShortcuts
         onFinished: panel.finished()
         onUnsafePaste: (text) => panel.unsafePaste(text)

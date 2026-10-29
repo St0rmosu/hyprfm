@@ -231,7 +231,7 @@ TerminalView::TerminalView(QQuickItem *parent)
     setCursor(Qt::IBeamCursor);
     setAcceptHoverEvents(true);   // motion reports for programs that track it
 
-    const size_t scrollback = 10000;
+    const size_t scrollback = size_t(m_scrollbackLines);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &scrollback);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_USERDATA, this);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
@@ -349,6 +349,20 @@ void TerminalView::setCursorBlink(bool on)
     m_cursorBlink = on;
     applyCursorDefaults();
     updateBlinkTimer();
+}
+
+void TerminalView::setScrollbackLines(int lines)
+{
+    lines = qMax(0, lines);
+    if (m_scrollbackLines == lines)
+        return;
+    m_scrollbackLines = lines;
+    // Lowering it drops the oldest history at once.
+    const size_t max = size_t(lines);
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &max);
+    updateScrollbar();
+    Q_EMIT scrollbackLinesChanged();
+    update();
 }
 
 void TerminalView::applyCursorDefaults()
