@@ -4,6 +4,7 @@
 #include <QMap>
 #include <QDateTime>
 #include <QFileSystemWatcher>
+#include <QStandardPaths>
 #include <QVariantList>
 
 class ThemeLoader : public QObject
@@ -29,6 +30,12 @@ public:
     explicit ThemeLoader(QObject *parent = nullptr);
     void loadTheme(const QString &nameOrPath, const QStringList &themesDirs);
     QColor color(const QString &name) const;
+    // The "pywal" theme name reads the palette wal writes on every run.
+    static QString pywalColorsPath()
+    {
+        return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation)
+            + QStringLiteral("/wal/colors.json");
+    }
     QColor base() const { return color("base"); }
     QColor mantle() const { return color("mantle"); }
     QColor crust() const { return color("crust"); }
@@ -46,6 +53,7 @@ signals:
     void themeChanged();
 private:
     void applyThemeFile(const QString &filePath);
+    void applyPywalFile(const QString &filePath);
     void watchThemeFile(const QString &filePath);
 
     QMap<QString, QColor> m_colors;

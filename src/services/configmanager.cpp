@@ -1,4 +1,5 @@
 #include "services/configmanager.h"
+#include "services/themeloader.h"
 
 #define TOML_HEADER_ONLY 1
 #include "third_party/toml.hpp"
@@ -239,6 +240,22 @@ ConfigManager::ConfigManager(const QString &configPath, QObject *parent, const Q
     if (QFile::exists(m_configPath))
         m_watcher.addPath(m_configPath);
     m_watcher.addPath(QFileInfo(m_configPath).absolutePath());
+    // Icon generators update several files in a burst. Publish one revision
+    // after the writes settle, keeping partially written themes out of QML.
+    m_iconRefreshTimer.setSingleShot(true);
+    m_iconRefreshTimer.setInterval(300);
+    connect(&m_iconRefreshTimer, &QTimer::timeout, this, [this]() {
+        if (!m_autoRefreshIcons) return;
+        watchIconTheme();
+        ++m_iconRevision;
+        emit iconRevisionChanged();
+    });
+    const auto scheduleIconRefresh = [this]() {
+        if (m_autoRefreshIcons) m_iconRefreshTimer.start();
+    };
+    connect(&m_iconWatcher, &QFileSystemWatcher::fileChanged, this, scheduleIconRefresh);
+    connect(&m_iconWatcher, &QFileSystemWatcher::directoryChanged, this, scheduleIconRefresh);
+    watchIconTheme();
 }
 
 QStringList ConfigManager::availableThemes() const
@@ -256,6 +273,8 @@ QStringList ConfigManager::availableThemes() const
                 themes.append(name);
         }
     }
+    if (QFile::exists(ThemeLoader::pywalColorsPath()) && !themes.contains("pywal"))
+        themes.append(QStringLiteral("pywal"));
     themes.sort(Qt::CaseInsensitive);
     return themes;
 }
@@ -313,6 +332,7 @@ void ConfigManager::setDefaults()
     // whichever fallback theme happened to have them - and it stays the
     // built-in answer for a desktop that publishes nothing.
     m_iconTheme.clear();
+    m_autoRefreshIcons = true;
     m_iconThemeFallback = QStringLiteral("Adwaita");
     m_fontFamily.clear();
     m_defaultView = "grid";
@@ -359,9 +379,37 @@ void ConfigManager::setDefaults()
     m_shortcuts = s_defaultShortcuts;
 }
 
+void ConfigManager::watchIconTheme()
+{
+    const auto watchedFiles = m_iconWatcher.files();
+    const auto watchedDirs = m_iconWatcher.directories();
+    if (!watchedFiles.isEmpty()) m_iconWatcher.removePaths(watchedFiles);
+    if (!watchedDirs.isEmpty()) m_iconWatcher.removePaths(watchedDirs);
+    if (!m_autoRefreshIcons) {
+        m_iconRefreshTimer.stop();
+        return;
+    }
+    const QString themeName = m_iconTheme.isEmpty() ? m_iconThemeFallback : m_iconTheme;
+    // The user-writable folders IconProvider searches; system themes in
+    // /usr/share only change on a package update.
+    for (const QString &root : {QDir::homePath() + QStringLiteral("/.icons/"),
+                                QDir::homePath() + QStringLiteral("/.local/share/icons/")}) {
+        const QString baseDir = root + themeName;
+        const QString iconDir = baseDir + QStringLiteral("/scalable/places");
+        for (const QString &path : {iconDir, baseDir + QStringLiteral("/index.theme"),
+                                    iconDir + QStringLiteral("/folder.svg")}) {
+            if (QFileInfo::exists(path))
+                m_iconWatcher.addPath(path);
+        }
+    }
+}
+
 void ConfigManager::reload()
 {
+    m_iconRevision++;
     loadConfig();
+    watchIconTheme();
+    emit iconRevisionChanged();
     emit configChanged();
 }
 
@@ -388,6 +436,8 @@ void ConfigManager::loadConfig()
             m_lightTheme = QString::fromStdString(*v);
         if (auto v = config["general"]["dark_theme"].value<std::string>())
             m_darkTheme = QString::fromStdString(*v);
+        if (auto v = config["general"]["auto_refresh_icons"].value<bool>())
+            m_autoRefreshIcons = *v;
         if (auto v = config["general"]["icon_theme"].value<std::string>())
             m_iconTheme = QString::fromStdString(*v);
         if (auto v = config["general"]["font_family"].value<std::string>())
@@ -679,6 +729,9 @@ dark_theme = "catppuccin-mocha"
 # /usr/share/icons or ~/.icons). Toolbar and sidebar icons are built in.
 # Empty follows the desktop's own icon theme.
 icon_theme = ""
+
+# Reload icons when the selected local icon theme is updated.
+auto_refresh_icons = true
 
 # UI font family. Empty = the desktop's UI font.
 font_family = ""
@@ -983,6 +1036,7 @@ void ConfigManager::setIconThemeFallback(const QString &theme)
     if (m_iconThemeFallback == trimmed)
         return;
     m_iconThemeFallback = trimmed;
+    watchIconTheme();
     if (m_iconTheme.isEmpty())
         emit configChanged();
 }
@@ -1219,6 +1273,10 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
         general.insert_or_assign(tomlKey, value.toStdString());
     }
 
+    if (settings.contains("autoRefreshIcons")) {
+        m_autoRefreshIcons = settings.value("autoRefreshIcons").toBool();
+        general.insert_or_assign("auto_refresh_icons", m_autoRefreshIcons);
+    }
     if (settings.contains("iconTheme")) {
         const QString iconTheme = settings.value("iconTheme").toString().trimmed();
         if (!iconTheme.isEmpty()) {
@@ -1462,6 +1520,7 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
         m_watcher.addPath(m_configPath);
     }
 
+    watchIconTheme();
     emit configChanged();
 }
 

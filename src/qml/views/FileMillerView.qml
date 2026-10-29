@@ -379,7 +379,7 @@ FocusScope {
                         Image {
                             width: root.millerIconSize; height: root.millerIconSize
                             anchors.verticalCenter: parent.verticalCenter
-                            source: "image://icon/" + parentDelegate.fileIconName + "?theme=" + config.iconTheme
+                            source: "image://icon/" + parentDelegate.fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                             sourceSize: Qt.size(root.millerIconSize * Screen.devicePixelRatio,
                                                 root.millerIconSize * Screen.devicePixelRatio)
                             asynchronous: true
@@ -900,7 +900,7 @@ FocusScope {
                                 anchors.fill: parent
                                 visible: !millerThumb.visible
                                 opacity: currentDelegate.fileName.startsWith(".") ? Theme.hiddenIconOpacity : 1
-                                source: "image://icon/" + currentDelegate.fileIconName + "?theme=" + config.iconTheme
+                                source: "image://icon/" + currentDelegate.fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                                 sourceSize: Qt.size((root.millerIconSize + 2) * Screen.devicePixelRatio,
                                                     (root.millerIconSize + 2) * Screen.devicePixelRatio)
                                 asynchronous: true
@@ -1535,7 +1535,7 @@ FocusScope {
                                 Image {
                                     width: 14; height: 14
                                     anchors.verticalCenter: parent.verticalCenter
-                                    source: "image://icon/" + fileIconName + "?theme=" + config.iconTheme
+                                    source: "image://icon/" + fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                                     opacity: fileName.startsWith(".") ? Theme.hiddenIconOpacity : 1
                                     sourceSize: Qt.size(14 * Screen.devicePixelRatio,
                                                         14 * Screen.devicePixelRatio)
@@ -1782,7 +1782,7 @@ FocusScope {
                         Image {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: 64; height: 64
-                            source: "image://icon/" + (previewColumn.fileProps.iconName || (previewColumn.isPdf ? "application-pdf" : "image-x-generic")) + "?theme=" + config.iconTheme
+                            source: "image://icon/" + (previewColumn.fileProps.iconName || (previewColumn.isPdf ? "application-pdf" : "image-x-generic")) + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                             sourceSize: Qt.size(64, 64)
                             asynchronous: true
                         }
@@ -1892,7 +1892,7 @@ FocusScope {
                         Image {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: 72; height: 72
-                            source: "image://icon/" + (previewColumn.fileProps.iconName || "application-pdf") + "?theme=" + config.iconTheme
+                            source: "image://icon/" + (previewColumn.fileProps.iconName || "application-pdf") + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
                             sourceSize: Qt.size(72, 72)
                             asynchronous: true
                         }
@@ -2038,8 +2038,8 @@ FocusScope {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: 64; height: 64
                             source: previewColumn.fileProps.iconName
-                                ? ("image://icon/" + previewColumn.fileProps.iconName + "?theme=" + config.iconTheme)
-                                : ("image://icon/text-x-generic?theme=" + config.iconTheme)
+                                ? ("image://icon/" + previewColumn.fileProps.iconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision)
+                                : ("image://icon/text-x-generic?theme=" + config.iconTheme + "&r=" + config.iconRevision)
                             sourceSize: Qt.size(64, 64)
                             asynchronous: true
                         }

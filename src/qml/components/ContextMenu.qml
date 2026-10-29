@@ -1025,7 +1025,7 @@ Item {
                 spacing: 8
                 Image {
                     source: subItemData && subItemData.iconName
-                        ? ("image://icon/" + subItemData.iconName + "?theme=" + config.iconTheme)
+                        ? ("image://icon/" + subItemData.iconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision)
                         : ""
                     sourceSize: Qt.size(18, 18)
                     Layout.preferredWidth: visible ? 18 : 0

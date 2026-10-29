@@ -59,13 +59,20 @@ GridView {
     // Two lines of the label font, so a larger desktop font does not get
     // clipped: 32 px was exactly two lines at 10 pt and nothing more.
     readonly property int labelHeight: Math.round(32 * Theme.uiScale)
-    // Ask for the size the icon is actually drawn at. A fixed 96 was being
-    // stretched to iconSize, which is ~229 at the default seven columns on a
-    // 1080p window and over 900 zoomed all the way in, so every icon looked
-    // soft despite the sources being SVG. Rounded up to 32px buckets so
-    // zooming does not defeat the provider's per-size cache.
-    readonly property int iconRequestSize:
-        Math.max(96, Math.ceil(root.iconSize / 32) * 32) * Screen.devicePixelRatio
+    // Ask for exactly the size the icon is drawn at. A fixed 96 was being
+    // stretched to iconSize (~229 at seven columns on a 1080p window), and
+    // 32 px buckets still shrank a 96 px render to 87, which blurred thin
+    // icons (MacTahoe's markdown). The request follows only once resizing
+    // stops, so dragging the window edge does not re-render every icon at
+    // each pixel; meanwhile the last render is scaled.
+    readonly property int exactIconRequestSize: Math.max(16, Math.ceil(root.iconSize * Screen.devicePixelRatio))
+    property int iconRequestSize: exactIconRequestSize
+    onExactIconRequestSizeChanged: iconSizeSettle.restart()
+    Timer {
+        id: iconSizeSettle
+        interval: 150
+        onTriggered: root.iconRequestSize = root.exactIconRequestSize
+    }
     readonly property int thumbnailRequestSize: 256 * Screen.devicePixelRatio
 
     cellWidth: Math.floor(width / effectiveColumnCount)
@@ -645,7 +652,7 @@ GridView {
             anchors.topMargin: 8
             width: root.iconSize
             height: root.iconSize
-            source: "image://icon/" + delegateItem.fileIconName + "?theme=" + config.iconTheme
+            source: "image://icon/" + delegateItem.fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
             sourceSize: Qt.size(root.iconRequestSize, root.iconRequestSize)
             asynchronous: true
         }

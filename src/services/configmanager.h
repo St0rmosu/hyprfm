@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QFileSystemWatcher>
 #include <QMap>
+#include <QTimer>
 
 class ConfigManager : public QObject
 {
@@ -18,6 +19,8 @@ class ConfigManager : public QObject
     Q_PROPERTY(QStringList availableThemes READ availableThemes CONSTANT)
     Q_PROPERTY(QString theme READ theme NOTIFY configChanged)
     Q_PROPERTY(QString iconTheme READ iconTheme NOTIFY configChanged)
+    Q_PROPERTY(bool autoRefreshIcons READ autoRefreshIcons NOTIFY configChanged)
+    Q_PROPERTY(int iconRevision READ iconRevision NOTIFY iconRevisionChanged)
     Q_PROPERTY(QString fontFamily READ fontFamily NOTIFY configChanged)
     Q_PROPERTY(QString defaultView READ defaultView NOTIFY configChanged)
     Q_PROPERTY(QString splitOrientation READ splitOrientation NOTIFY configChanged)
@@ -85,6 +88,8 @@ public:
     QString lightTheme() const;
     QString darkTheme() const;
     QString iconTheme() const;
+    bool autoRefreshIcons() const { return m_autoRefreshIcons; }
+    int iconRevision() const { return m_iconRevision; }
     // What an empty icon_theme resolves to: the desktop's own theme, which
     // only main.cpp can ask the portal for. Set once at startup.
     void setIconThemeFallback(const QString &theme);
@@ -180,6 +185,7 @@ signals:
     void savedSplitsChanged();
     void listColumnsChanged();
     void millerFractionsChanged();
+    void iconRevisionChanged();
 
 private:
     void loadConfig();
@@ -199,7 +205,12 @@ private:
     QStringList m_themesDirs;
     QString m_defaultThemeName;
     QFileSystemWatcher m_watcher;
+    QFileSystemWatcher m_iconWatcher;
+    QTimer m_iconRefreshTimer;
+    bool m_autoRefreshIcons = true;
     QDateTime m_configModified;
+    int m_iconRevision = 0;
+    void watchIconTheme();
 
     QString m_theme;
     QString m_lightTheme;

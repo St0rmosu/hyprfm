@@ -10,6 +10,21 @@ class TestIconProvider : public QObject
 {
     Q_OBJECT
 
+    static void writeFile(QTemporaryDir &dir, const QString &rel, const QByteArray &data)
+    {
+        QFileInfo fi(dir.filePath(rel));
+        QDir().mkpath(fi.absolutePath());
+        QFile f(fi.absoluteFilePath());
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(data);
+    }
+
+    static void writeSvg(QTemporaryDir &dir, const QString &rel, const QString &fill)
+    {
+        writeFile(dir, rel, QStringLiteral("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'>"
+                                           "<rect width='10' height='10' fill='%1'/></svg>").arg(fill).toUtf8());
+    }
+
 private slots:
     void testConstruction()
     {
@@ -71,6 +86,53 @@ private slots:
         QCOMPARE(provider.requestImage("folder?theme=one", &size, QSize(32, 32)).pixelColor(16, 16), QColor("#ff0000"));
         QCOMPARE(provider.requestImage("folder?theme=two", &size, QSize(32, 32)).pixelColor(16, 16), QColor("#00ff00"));
         qunsetenv("XDG_DATA_DIRS");
+    }
+
+    // MacTahoe-style layout: colour icons in <category>/scalable, symbolic
+    // ones in <category>/24; the colour one must win.
+    void testFindsCategoryScalableBeforeSizedSymbolic()
+    {
+        QTemporaryDir dir;
+        writeSvg(dir, "icons/t/places/24/folder.svg", "#0000ff");
+        writeSvg(dir, "icons/t/places/scalable/folder.svg", "#ff0000");
+        qputenv("XDG_DATA_DIRS", dir.path().toUtf8());
+        IconProvider provider("t");
+        QSize size;
+        const QImage img = provider.requestImage("folder", &size, QSize(32, 32));
+        qunsetenv("XDG_DATA_DIRS");
+        QCOMPARE(img.pixelColor(16, 16), QColor("#ff0000"));
+    }
+
+    // A file icon the theme lacks comes from the theme it inherits, ahead
+    // of the generic fallbacks (Adwaita here).
+    void testInheritedThemeBeforeGenericFallbacks()
+    {
+        QTemporaryDir dir;
+        writeFile(dir, "icons/child/index.theme", "[Icon Theme]\nName=child\nInherits=parent\n");
+        writeSvg(dir, "icons/child/places/scalable/folder.svg", "#000000");
+        writeSvg(dir, "icons/parent/mimetypes/scalable/text-plain.svg", "#00ff00");
+        writeSvg(dir, "icons/Adwaita/mimetypes/scalable/text-plain.svg", "#ff0000");
+        qputenv("XDG_DATA_DIRS", dir.path().toUtf8());
+        IconProvider provider("child");
+        QSize size;
+        const QImage img = provider.requestImage("text-plain", &size, QSize(32, 32));
+        qunsetenv("XDG_DATA_DIRS");
+        QCOMPARE(img.pixelColor(16, 16), QColor("#00ff00"));
+    }
+
+    // MacTahoe names its shell script icon "shellscript": the theme's own
+    // icon under that alias beats the fallback theme's exact name.
+    void testPrimaryThemeAliasBeforeFallback()
+    {
+        QTemporaryDir dir;
+        writeSvg(dir, "icons/t/mimes/scalable/shellscript.svg", "#00ff00");
+        writeSvg(dir, "icons/Adwaita/mimetypes/scalable/text-x-shellscript.svg", "#ff0000");
+        qputenv("XDG_DATA_DIRS", dir.path().toUtf8());
+        IconProvider provider("t");
+        QSize size;
+        const QImage img = provider.requestImage("text-x-shellscript", &size, QSize(32, 32));
+        qunsetenv("XDG_DATA_DIRS");
+        QCOMPARE(img.pixelColor(16, 16), QColor("#00ff00"));
     }
 
     void testMissingIconReturnsImage()

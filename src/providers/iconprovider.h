@@ -26,6 +26,12 @@ public:
         setPrimaryTheme(primaryTheme);
     }
 
+    void clearCache()
+    {
+        QMutexLocker locker(&m_cacheMutex);
+        m_cache.clear();
+    }
+
     void setPrimaryTheme(const QString &primaryTheme)
     {
         const QString themeName = primaryTheme.trimmed().isEmpty() ? QStringLiteral("Adwaita")
@@ -45,7 +51,44 @@ public:
                 m_primaryDirs.append(path);
         }
 
-        const QStringList fallbacks = {"breeze", "Papirus", "Adwaita", "hicolor"};
+        // The theme's own Inherits= chain first (MacTahoe -> hicolor), so a
+        // file icon it lacks comes from the theme it builds on; then the
+        // common full themes, so a theme with few mimetype icons still gets
+        // coloured ones instead of a blank.
+        QStringList fallbacks;
+        QStringList pending = {themeName};
+        while (!pending.isEmpty()) {
+            const QString theme = pending.takeFirst();
+            for (const auto &dir : m_searchDirs) {
+                // Only the Inherits= line: QSettings would parse the whole
+                // file, and Papirus lists thousands of directories in it.
+                QFile index(dir + "/" + theme + "/index.theme");
+                if (!index.open(QIODevice::ReadOnly | QIODevice::Text))
+                    continue;
+                QString inherits;
+                while (!index.atEnd()) {
+                    const QByteArray line = index.readLine().trimmed();
+                    if (line.startsWith("Inherits=")) {
+                        inherits = QString::fromUtf8(line.mid(9));
+                        break;
+                    }
+                    if (line.startsWith("[") && line != "[Icon Theme]")
+                        break;   // Inherits lives in [Icon Theme], which comes first
+                }
+                for (QString parent : inherits.split(QLatin1Char(','))) {
+                    parent = parent.trimmed();
+                    if (!parent.isEmpty() && parent != themeName && !fallbacks.contains(parent)) {
+                        fallbacks.append(parent);
+                        pending.append(parent);
+                    }
+                }
+                break;
+            }
+        }
+        for (const QString theme : {"breeze", "Papirus", "Adwaita", "hicolor"}) {
+            if (!fallbacks.contains(theme))
+                fallbacks.append(theme);
+        }
         for (const auto &theme : fallbacks) {
             if (theme == themeName)
                 continue;
@@ -71,6 +114,7 @@ public:
         QString iconName = id;
         QColor tintColor;
         QString requestedTheme;
+        QString revision;
         int qmark = id.indexOf('?');
         if (qmark >= 0) {
             iconName = id.left(qmark);
@@ -80,6 +124,8 @@ public:
                     tintColor = QColor(param.mid(6));
                 else if (param.startsWith("theme="))
                     requestedTheme = param.mid(6);
+                else if (param.startsWith("r="))
+                    revision = param.mid(2);
             }
         }
         if (!requestedTheme.isEmpty())
@@ -96,7 +142,8 @@ public:
             cacheKey = m_primaryTheme + QLatin1Char('\x1f')
                 + iconName + QLatin1Char('\x1f')
                 + QString::number(sz) + QLatin1Char('\x1f')
-                + tintKey;
+                + tintKey + QLatin1Char('\x1f')
+                + revision;
             if (const QImage *cached = m_cache.object(cacheKey)) {
                 if (size)
                     *size = cached->size();
@@ -111,6 +158,31 @@ public:
         // If not found → return empty so QML uses PathSvg fallback
         // For file/mime icons: search primary first, then fallbacks
         QString svgPath = findIconIn(iconName, sz, primaryDirs);
+
+        // Prefer icons that actually ship with the primary theme (e.g.
+        // MacTahoe's shellscript.svg) over inherited fallback icons.
+        if (svgPath.isEmpty() && !isSymbolic) {
+            QStringList aliases;
+            if (iconName.startsWith(QStringLiteral("text-x-"))) {
+                aliases << iconName.mid(7);
+                aliases << QStringLiteral("application-x-") + iconName.mid(7);
+            } else if (iconName.startsWith(QStringLiteral("application-x-"))) {
+                aliases << iconName.mid(14);
+                aliases << QStringLiteral("text-x-") + iconName.mid(14);
+            } else if (iconName.startsWith(QStringLiteral("application-"))) {
+                aliases << iconName.mid(12);
+            } else if (iconName.startsWith(QStringLiteral("text-"))) {
+                aliases << iconName.mid(5);
+            }
+            aliases << QStringLiteral("gnome-mime-") + iconName;
+            for (const QString &alias : aliases) {
+                if (alias.isEmpty() || alias == iconName)
+                    continue;
+                svgPath = findIconIn(alias, sz, primaryDirs);
+                if (!svgPath.isEmpty())
+                    break;
+            }
+        }
 
         if (svgPath.isEmpty()) {
             if (isSymbolic) {
@@ -219,7 +291,7 @@ private:
     QString findIconIn(const QString &name, int size, const QStringList &themeDirs) const
     {
         static const QStringList categories = {
-            "actions", "places", "mimetypes", "devices",
+            "actions", "places", "mimetypes", "mimes", "devices",
             "status", "apps", "categories", "emblems"
         };
         static const QStringList extensions = {".svg", ".png"};
@@ -232,9 +304,25 @@ private:
                     return path;
             }
 
+            // Pattern 1b: category/scalable/name.svg (Breeze, MacTahoe, ...)
+            for (const auto &cat : categories) {
+                for (const auto &ext : extensions) {
+                    QString path = themeDir + "/" + cat + "/scalable/" + name + ext;
+                    if (QFile::exists(path))
+                        return path;
+                }
+            }
+
             // Pattern 2: symbolic/category/name.svg (Adwaita symbolic)
             for (const auto &cat : categories) {
                 QString path = themeDir + "/symbolic/" + cat + "/" + name + ".svg";
+                if (QFile::exists(path))
+                    return path;
+            }
+
+            // Pattern 2b: category/symbolic/name.svg (Breeze, MacTahoe, ...)
+            for (const auto &cat : categories) {
+                QString path = themeDir + "/" + cat + "/symbolic/" + name + ".svg";
                 if (QFile::exists(path))
                     return path;
             }
