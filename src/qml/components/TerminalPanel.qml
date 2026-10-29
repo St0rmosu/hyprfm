@@ -193,11 +193,11 @@ Item {
     }
 
     // Where the link under the mouse really goes, as a browser shows it:
-    // an OSC 8 link's text can say anything.
+    // an OSC 8 link's text can say anything. Bottom right, off the prompt.
     Rectangle {
         objectName: "terminalLinkStatus"
         visible: view.hoveredLink !== ""
-        anchors { left: parent.left; bottom: parent.bottom; margins: 4 }
+        anchors { right: parent.right; bottom: parent.bottom; margins: 4 }
         width: Math.min(linkText.implicitWidth + 12, parent.width - 8)
         height: linkText.implicitHeight + 6
         radius: Theme.radiusSmall
