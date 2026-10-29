@@ -686,6 +686,26 @@ private slots:
         QCOMPARE(ignored & (1u << (SIGINT - 1)), 0u);
     }
 
+    // The shell does not inherit the identity of the terminal HyprFM was
+    // started from.
+    void testShellDropsOuterTerminalEnvironment()
+    {
+        QTemporaryDir dir;
+        const QString out = dir.filePath(QStringLiteral("env"));
+        qputenv("TMUX", "/tmp/tmux-1000/default,1,0");
+        qputenv("TERM_PROGRAM", "WezTerm");
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.start();
+        qunsetenv("TMUX");
+        qunsetenv("TERM_PROGRAM");
+        view.sendText(QStringLiteral("echo \"[$TMUX][$TERM_PROGRAM][$TERM]\" > %1\n").arg(out));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(out).size() > 0, 5000);
+        QFile file(out);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll().trimmed(), QByteArray("[][][xterm-256color]"));
+    }
+
     // A URL written out in the text is a link too, without the sentence
     // punctuation or a closing bracket around it.
     void testPlainUrlIsALink()

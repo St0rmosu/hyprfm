@@ -621,6 +621,14 @@ void TerminalView::start()
         setenv("COLORTERM", "truecolor", 1);
         unsetenv("COLUMNS");
         unsetenv("LINES");
+        // This is not the terminal HyprFM was started from: a shell that
+        // thinks it is inside tmux wraps everything for it (kitten icat,
+        // yazi), and one claiming kitty or WezTerm would steer programs to
+        // the wrong features or remote-control the other terminal.
+        for (const char *var : {"TMUX", "TMUX_PANE", "STY", "TERM_PROGRAM", "TERM_PROGRAM_VERSION",
+                                "VTE_VERSION", "KITTY_WINDOW_ID", "KITTY_PID", "KITTY_LISTEN_ON",
+                                "WEZTERM_PANE", "ALACRITTY_WINDOW_ID", "KONSOLE_VERSION"})
+            unsetenv(var);
         const char *name = strrchr(shell.constData(), '/');
         execl(shell.constData(), name ? name + 1 : shell.constData(), static_cast<char *>(nullptr));
         _exit(127);
