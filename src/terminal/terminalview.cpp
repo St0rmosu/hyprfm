@@ -619,8 +619,8 @@ void TerminalView::start()
 
 QString TerminalView::currentDirectory() const
 {
-    if (!m_shellDirectory.isEmpty())
-        return m_shellDirectory;
+    // Not the OSC 7 report: any output can claim a folder, and a new shell
+    // started in a hostile repository runs its git config via the prompt.
     if (m_pid > 0) {
         const QString cwd = QFileInfo(QStringLiteral("/proc/%1/cwd").arg(m_pid)).symLinkTarget();
         if (!cwd.isEmpty())
