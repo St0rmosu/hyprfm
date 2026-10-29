@@ -26,6 +26,12 @@ public:
         setPrimaryTheme(primaryTheme);
     }
 
+    void clearCache()
+    {
+        QMutexLocker locker(&m_cacheMutex);
+        m_cache.clear();
+    }
+
     void setPrimaryTheme(const QString &primaryTheme)
     {
         const QString themeName = primaryTheme.trimmed().isEmpty() ? QStringLiteral("Adwaita")
@@ -108,6 +114,7 @@ public:
         QString iconName = id;
         QColor tintColor;
         QString requestedTheme;
+        QString revision;
         int qmark = id.indexOf('?');
         if (qmark >= 0) {
             iconName = id.left(qmark);
@@ -117,6 +124,8 @@ public:
                     tintColor = QColor(param.mid(6));
                 else if (param.startsWith("theme="))
                     requestedTheme = param.mid(6);
+                else if (param.startsWith("r="))
+                    revision = param.mid(2);
             }
         }
         if (!requestedTheme.isEmpty())
@@ -133,7 +142,8 @@ public:
             cacheKey = m_primaryTheme + QLatin1Char('\x1f')
                 + iconName + QLatin1Char('\x1f')
                 + QString::number(sz) + QLatin1Char('\x1f')
-                + tintKey;
+                + tintKey + QLatin1Char('\x1f')
+                + revision;
             if (const QImage *cached = m_cache.object(cacheKey)) {
                 if (size)
                     *size = cached->size();

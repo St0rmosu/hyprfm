@@ -652,7 +652,7 @@ GridView {
             anchors.topMargin: 8
             width: root.iconSize
             height: root.iconSize
-            source: "image://icon/" + delegateItem.fileIconName + "?theme=" + config.iconTheme
+            source: "image://icon/" + delegateItem.fileIconName + "?theme=" + config.iconTheme + "&r=" + config.iconRevision
             sourceSize: Qt.size(root.iconRequestSize, root.iconRequestSize)
             asynchronous: true
         }

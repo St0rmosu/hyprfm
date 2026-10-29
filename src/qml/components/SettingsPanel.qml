@@ -76,6 +76,7 @@ Window {
 
     property string draftTheme: config.theme
     property string draftFontFamily: config.fontFamily
+    property bool draftAutoRefreshIcons: config.autoRefreshIcons
     property string draftIconTheme: config.iconTheme
     property bool draftDarkMode: true
     property bool draftShowHidden: currentShowHidden
@@ -266,6 +267,7 @@ Window {
         setDraftTheme(defaultThemeName)
         draftFontFamily = ""
         draftIconTheme = defaultIconThemeName
+        draftAutoRefreshIcons = true
         draftShowHidden = false
         draftHiddenLast = false
         draftRightClickToEditPath = true
@@ -313,6 +315,7 @@ Window {
             fontOptions = buildFontOptions()
 
             draftIconTheme = config.iconTheme
+            draftAutoRefreshIcons = config.autoRefreshIcons
             iconThemeOptions = buildOptions(availableIconThemeValues, draftIconTheme, "Adwaita")
 
             draftShowHidden = currentShowHidden
@@ -390,6 +393,7 @@ Window {
             darkTheme: draftDarkTheme,
             fontFamily: draftFontFamily,
             iconTheme: draftIconTheme,
+            autoRefreshIcons: draftAutoRefreshIcons,
             showHidden: draftShowHidden,
             hiddenLast: draftHiddenLast,
             rightClickToEditPath: draftRightClickToEditPath,
@@ -582,6 +586,16 @@ Window {
                 currentIndex: root.optionIndex(root.iconThemeOptions, root.draftIconTheme, 0)
                 onSelected: (_, value) => {
                     root.draftIconTheme = value
+                    root.applySettingsNow()
+                }
+            }
+
+            Q.Toggle {
+                Layout.fillWidth: true
+                label: "Automatically refresh icons"
+                checked: root.draftAutoRefreshIcons
+                onToggled: (value) => {
+                    root.draftAutoRefreshIcons = value
                     root.applySettingsNow()
                 }
             }

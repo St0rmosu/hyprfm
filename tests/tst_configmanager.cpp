@@ -16,6 +16,54 @@ private slots:
         QStandardPaths::setTestModeEnabled(true);
     }
 
+    void testLiveIconsCanBeDisabledAndPersisted()
+    {
+        QTemporaryDir configDir;
+        const QString path = configDir.path() + "/config.toml";
+        ConfigManager manager(path);
+        QVERIFY(manager.autoRefreshIcons());
+        manager.saveSettings({{"autoRefreshIcons", false}});
+        QVERIFY(!manager.autoRefreshIcons());
+        ConfigManager restored(path);
+        QVERIFY(!restored.autoRefreshIcons());
+        restored.saveSettings({{"autoRefreshIcons", true}});
+        QVERIFY(restored.autoRefreshIcons());
+    }
+
+    void testLocalIconChangesRefreshOnlyWhenEnabled()
+    {
+        const QString icons = QDir::homePath() + "/.local/share/icons";
+        QVERIFY(QDir().mkpath(icons));
+        QTemporaryDir theme(icons + "/hyprfm-test-XXXXXX");
+        QTemporaryDir config;
+        QVERIFY(theme.isValid());
+        const QString index = theme.path() + "/index.theme";
+        auto write = [&] {
+            QFile file(index);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Append));
+            file.write("\n");
+        };
+        write();
+        ConfigManager manager(config.path() + "/config.toml");
+        manager.saveSettings({{"iconTheme", QFileInfo(theme.path()).fileName()}});
+        QSignalSpy changed(&manager, &ConfigManager::iconRevisionChanged);
+        QSignalSpy settingsChanged(&manager, &ConfigManager::configChanged);
+        for (int i = 0; i < 4; ++i) {
+            write();
+            QTest::qWait(40);
+        }
+        QCOMPARE(changed.count(), 0);
+        QTRY_COMPARE(changed.count(), 1);
+        QTest::qWait(350);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(settingsChanged.count(), 0);
+        manager.saveSettings({{"autoRefreshIcons", false}});
+        changed.clear();
+        write();
+        QTest::qWait(150);
+        QCOMPARE(changed.count(), 0);
+    }
+
     // --- Default values ---
 
     void testParseErrorIsReportedAndKeepsLastGoodValues()
