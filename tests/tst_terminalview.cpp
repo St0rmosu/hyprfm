@@ -687,6 +687,18 @@ private slots:
         QCOMPARE(folder.count(), 0);
     }
 
+    // A mailto link loses every field but subject, body and cc: some mail
+    // clients would attach a local file named by attach=.
+    void testMailtoLinkDropsAttachments()
+    {
+        TerminalView view;
+        QSignalSpy opened(&view, &TerminalView::linkActivated);
+        showRow(view, QStringLiteral("'\\033]8;;mailto:me@example.com?subject=Hi&attach=/etc/passwd&Attachment=%%2Fx&body=b\\033\\\\mail\\033]8;;\\033\\\\'"));
+        ctrlClick(view, cellCentre(view, 1, 0));
+        QCOMPARE(opened.count(), 1);
+        QCOMPARE(opened.at(0).at(0).toString(), QStringLiteral("mailto:me@example.com?subject=Hi&body=b"));
+    }
+
     // Find covers the scrollback, ignores ASCII case, steps from the newest
     // match up into older output and wraps both ways, and tints matches.
     void testSearchScrollback()

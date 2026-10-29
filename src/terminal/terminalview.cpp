@@ -22,6 +22,7 @@
 #include <QRegularExpression>
 #include <QStyleHints>
 #include <QUrl>
+#include <QUrlQuery>
 #include <QVarLengthArray>
 
 // Ghostty structs have an `emit` field; this file signals with Q_EMIT.
@@ -1063,6 +1064,24 @@ bool TerminalView::activateLink(const QString &uri)
                                  QStringLiteral("mailto")};
     if (!web.contains(scheme) || (scheme != QLatin1String("mailto") && url.host().isEmpty()))
         return false;
+    if (scheme == QLatin1String("mailto")) {
+        // Some mail clients honour attach=/attachment= and would attach a
+        // local file (~/.ssh/id_rsa) to the new message. Only the address,
+        // subject, body and cc go through.
+        const QUrlQuery query(url);
+        QUrlQuery kept;
+        for (const auto &[key, value] : query.queryItems(QUrl::FullyDecoded)) {
+            const QString k = key.toLower();
+            if (k == QLatin1String("subject") || k == QLatin1String("body") || k == QLatin1String("cc"))
+                kept.addQueryItem(k, value);
+        }
+        QUrl mail;
+        mail.setScheme(QStringLiteral("mailto"));
+        mail.setPath(url.path(QUrl::FullyDecoded), QUrl::DecodedMode);
+        mail.setQuery(kept);
+        Q_EMIT linkActivated(mail.toString(QUrl::FullyEncoded));
+        return true;
+    }
     Q_EMIT linkActivated(url.toString(QUrl::FullyEncoded));
     return true;
 }
