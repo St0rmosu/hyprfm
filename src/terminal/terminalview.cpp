@@ -417,6 +417,8 @@ void TerminalView::setScrollbackLines(int lines)
     // Lowering it drops the oldest history at once.
     const size_t max = size_t(lines);
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &max);
+    if (!m_searchText.isEmpty())
+        m_searchRefresh.start();   // matches in the dropped history go
     updateScrollbar();
     Q_EMIT scrollbackLinesChanged();
     update();
@@ -564,6 +566,8 @@ void TerminalView::resizeGrid()
         winsize ws{rows, cols, uint16_t(cols * m_cellWidth), uint16_t(rows * m_cellHeight)};
         ioctl(m_ptyFd, TIOCSWINSZ, &ws);
     }
+    if (!m_searchText.isEmpty())
+        m_searchRefresh.start();   // rewrapping moves and merges matches
     updateScrollbar();
     update();
 }
@@ -1614,6 +1618,9 @@ void TerminalView::paintSearchMatches(QPainter *painter)
 {
     if (!m_search || m_searchText.isEmpty())
         return;
+    // Matches are snapshots, stale after any write or resize since the
+    // last feed; a feed (bounded work) brings the viewport's up to date.
+    ghostty_search_feed(m_search);
     QVarLengthArray<GhosttySelection, 64> matches(64);
     GhosttySelectionBuffer buffer{matches.data(), size_t(matches.size()), 0};
     GhosttyResult result = ghostty_search_get(m_search, GHOSTTY_SEARCH_DATA_VIEWPORT_MATCHES, &buffer);
