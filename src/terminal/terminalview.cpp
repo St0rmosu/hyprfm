@@ -12,6 +12,7 @@
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QPainter>
+#include <QPainterPath>
 #include <QSocketNotifier>
 #include <QStyleHints>
 #include <QUrl>
@@ -127,6 +128,61 @@ QFont defaultTerminalFont()
             font.setPointSizeF(size);
     }
     return font;
+}
+
+// An SGR 4 underline from x0 to x1 under `baseline`, kept inside the cell
+// (`bottom`). Curly is what editors use for diagnostics, so it has to read
+// as a wave, not a thick line.
+void drawUnderline(QPainter *painter, int style, const QColor &color, qreal x0, qreal x1, qreal baseline,
+                   qreal bottom, qreal thickness, qreal cellWidth)
+{
+    const qreal top = qMin(baseline + thickness, bottom - thickness);
+    painter->save();
+    switch (style) {
+    case GHOSTTY_SGR_UNDERLINE_DOUBLE: {
+        const qreal gap = qMax(2.0, thickness);
+        const qreal first = qMax(baseline, qMin(top, bottom - 2 * thickness - gap));
+        painter->fillRect(QRectF(x0, first, x1 - x0, thickness), color);
+        painter->fillRect(QRectF(x0, first + thickness + gap, x1 - x0, thickness), color);
+        break;
+    }
+    case GHOSTTY_SGR_UNDERLINE_CURLY: {
+        // The wave fills the descender space below the baseline, one
+        // period a cell, as kitty and Ghostty draw it.
+        const qreal amplitude = qMax(1.5, (bottom - baseline - thickness) / 2);
+        const qreal mid = baseline + (bottom - baseline) / 2;
+        const qreal period = qMax(4.0, cellWidth);
+        QPainterPath wave(QPointF(x0, mid));
+        for (qreal x = x0; x < x1; x += period) {
+            const qreal half = period / 2;
+            wave.quadTo(x + half / 2, mid - amplitude, qMin(x + half, x1), mid);
+            if (x + half < x1)
+                wave.quadTo(x + half + half / 2, mid + amplitude, qMin(x + period, x1), mid);
+        }
+        painter->setRenderHint(QPainter::Antialiasing);
+        painter->setClipRect(QRectF(x0, baseline - thickness, x1 - x0, bottom - baseline + thickness));
+        painter->setPen(QPen(color, thickness, Qt::SolidLine, Qt::FlatCap));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(wave);
+        break;
+    }
+    case GHOSTTY_SGR_UNDERLINE_DOTTED:
+    case GHOSTTY_SGR_UNDERLINE_DASHED: {
+        // Dash lengths in whole pixels from x = 0, so a run split in two
+        // still lines up with its neighbour.
+        const qreal on = style == GHOSTTY_SGR_UNDERLINE_DOTTED ? thickness : 3 * thickness;
+        const qreal step = 2 * on;
+        for (qreal x = std::floor(x0 / step) * step; x < x1; x += step) {
+            const qreal a = qMax(x, x0), b = qMin(x + on, x1);
+            if (b > a)
+                painter->fillRect(QRectF(a, top, b - a, thickness), color);
+        }
+        break;
+    }
+    default:
+        painter->fillRect(QRectF(x0, top, x1 - x0, thickness), color);
+    }
+    painter->restore();
 }
 
 QString ghosttyString(GhosttyTerminal terminal, GhosttyTerminalData data)
@@ -1012,21 +1068,28 @@ void TerminalView::paint(QPainter *painter)
         int cells = 0;
         QRgb color = 0;
         int font = 0;
-        bool underline = false;
+        int underline = GHOSTTY_SGR_UNDERLINE_NONE;
+        QRgb underlineColor = 0;
         bool strikethrough = false;
+        bool overline = false;
     } run;
     qreal y = Padding;
+    const qreal thickness = qMax(1.0, std::round(m_cellHeight / 16.0));
     const auto flush = [&] {
         if (run.cells == 0)
             return;
-        painter->setPen(QColor::fromRgba(run.color));
+        const QColor color = QColor::fromRgba(run.color);
+        painter->setPen(color);
         painter->setFont(m_cellFonts[run.font]);
         painter->drawText(QPointF(run.x, y + m_ascent), run.text);
         const qreal end = run.x + run.cells * m_cellWidth;
-        if (run.underline)
-            painter->drawLine(QPointF(run.x, y + m_ascent + 2), QPointF(end, y + m_ascent + 2));
+        if (run.underline != GHOSTTY_SGR_UNDERLINE_NONE)
+            drawUnderline(painter, run.underline, QColor::fromRgba(run.underlineColor), run.x, end,
+                          y + m_ascent, y + m_cellHeight, thickness, m_cellWidth);
         if (run.strikethrough)
-            painter->drawLine(QPointF(run.x, y + m_cellHeight / 2), QPointF(end, y + m_cellHeight / 2));
+            painter->fillRect(QRectF(run.x, y + m_cellHeight / 2 - thickness / 2, end - run.x, thickness), color);
+        if (run.overline)
+            painter->fillRect(QRectF(run.x, y, end - run.x, thickness), color);
         run.text.clear();
         run.cells = 0;
     };
@@ -1090,8 +1153,15 @@ void TerminalView::paint(QPainter *painter)
                 // fitted font; anything else (fallback fonts, wide and
                 // combining characters) is drawn on its own.
                 const bool joinable = graphemeLen == 1 && codepoints[0] < 0x80 && wide == GHOSTTY_CELL_WIDE_NARROW;
+                // SGR 58 colours the underline on its own; unset, it follows the text.
+                QRgb underlineColor = color.rgba();
+                if (style.underline_color.tag == GHOSTTY_STYLE_COLOR_PALETTE)
+                    underlineColor = qcolor(colors.palette[style.underline_color.value.palette]).rgba();
+                else if (style.underline_color.tag == GHOSTTY_STYLE_COLOR_RGB)
+                    underlineColor = qcolor(style.underline_color.value.rgb).rgba();
                 if (!joinable || run.color != color.rgba() || run.font != font
-                    || run.underline != bool(style.underline) || run.strikethrough != style.strikethrough
+                    || run.underline != style.underline || run.underlineColor != underlineColor
+                    || run.strikethrough != style.strikethrough || run.overline != style.overline
                     || (run.cells > 0 && run.x + run.cells * m_cellWidth != x))
                     flush();
                 if (run.cells == 0) {
@@ -1099,7 +1169,9 @@ void TerminalView::paint(QPainter *painter)
                     run.color = color.rgba();
                     run.font = font;
                     run.underline = style.underline;
+                    run.underlineColor = underlineColor;
                     run.strikethrough = style.strikethrough;
+                    run.overline = style.overline;
                 }
                 run.text += QString::fromUcs4(reinterpret_cast<const char32_t *>(codepoints.data()),
                                               codepoints.size());

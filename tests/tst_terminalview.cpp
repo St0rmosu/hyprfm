@@ -12,6 +12,7 @@
 #include <QKeyEvent>
 #include <QPainter>
 #include <QQuickWindow>
+#include <QSet>
 #include <QSignalSpy>
 #include <QStyleHints>
 #include <QTemporaryDir>
@@ -436,6 +437,69 @@ private slots:
         // A palette of the wrong size is ignored: back to Ghostty's red.
         view.setAnsiPalette({});
         QCOMPARE(countPixels(render(view), green), 0);
+    }
+
+    // SGR 4:1-4:5 draw five different underlines under the same text, and
+    // SGR 58 recolours them. Each style is told apart by its pixel profile
+    // under the text: rows lit (double has two bands) and columns lit
+    // (dotted and dashed leave gaps, a wave moves between rows).
+    void testUnderlineStyles()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.setBackground(Qt::black);
+        view.setForeground(Qt::white);
+        view.start();
+        // Row r (0-4) holds 20 spaces in underline style r+1, coloured pure
+        // red with SGR 58 so only the line itself is red.
+        view.sendText(QStringLiteral("clear; for s in 1 2 3 4 5; do printf '\\033[4:%sm\\033[58:2::255:0:0m%20s\\033[0m\\n' $s ''; done; sleep 5\n"));
+        const QFontMetricsF metrics(view.font());
+        const int cellH = qCeil(metrics.height());
+        const int cellW = qCeil(metrics.horizontalAdvance(QLatin1Char('M')));
+        QImage image;
+        // Anything reddish: the wave is antialiased, and nothing else on
+        // the black screen is red.
+        const auto isRed = [](QColor c) { return c.red() > 50 && c.green() < 40 && c.blue() < 40; };
+        QTRY_VERIFY_WITH_TIMEOUT((image = render(view), countPixels(image, isRed) > 5 * 15 * cellW / 2), 5000);
+        if (qEnvironmentVariableIsSet("HYPRFM_TEST_GRAB"))
+            image.save(qEnvironmentVariable("HYPRFM_TEST_GRAB"));
+        struct Profile { int bands = 0; int litColumns = 0; int distinctRows = 0; };
+        const auto profile = [&](int row) {
+            Profile p;
+            const int top = 6 + row * cellH;
+            const int x0 = 6, x1 = 6 + 20 * cellW;
+            bool inBand = false;
+            QSet<int> rows;
+            for (int y = top; y < top + cellH; ++y) {
+                bool lit = false;
+                for (int x = x0; x < x1; ++x)
+                    lit |= isRed(image.pixelColor(x, y));
+                if (lit && !inBand)
+                    ++p.bands;
+                inBand = lit;
+            }
+            for (int x = x0; x < x1; ++x) {
+                for (int y = top; y < top + cellH; ++y) {
+                    if (isRed(image.pixelColor(x, y))) {
+                        ++p.litColumns;
+                        rows.insert(y);
+                        break;
+                    }
+                }
+            }
+            p.distinctRows = rows.size();
+            return p;
+        };
+        const int width = 20 * cellW;
+        const Profile single = profile(0), dbl = profile(1), curly = profile(2), dotted = profile(3),
+                      dashed = profile(4);
+        QCOMPARE(single.bands, 1);
+        QVERIFY(single.litColumns > width - 2);
+        QCOMPARE(dbl.bands, 2);
+        QVERIFY2(curly.distinctRows >= 3, qPrintable(QString::number(curly.distinctRows)));
+        QVERIFY(curly.litColumns > width - 2);
+        QVERIFY(dotted.litColumns < width * 0.7 && dotted.litColumns > width * 0.3);
+        QVERIFY(dashed.litColumns < width * 0.7 && dashed.litColumns > width * 0.3);
     }
 
     void testExitEndsTheSession()
