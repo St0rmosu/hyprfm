@@ -293,6 +293,38 @@ private slots:
         QVERIFY(loader.color("crust").lightness() < loader.color("mantle").lightness());
         QVERIFY(loader.color("surface").lightness() > loader.color("overlay").lightness());
     }
+
+    // pywal's sixteen colours become the terminal palette; without all
+    // sixteen the previous theme's palette must not linger.
+    void testPywalThemeSetsTerminalPalette()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath("colors.json");
+        QByteArray colors;
+        for (int i = 0; i < 16; ++i)
+            colors += QStringLiteral("%1\"color%2\": \"#%3%3%3\"").arg(i ? ", " : "").arg(i)
+                          .arg(i * 16, 2, 16, QLatin1Char('0')).toUtf8();
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("{\"special\": {\"background\": \"#000000\", \"foreground\": \"#ffffff\"},"
+                   " \"colors\": {" + colors + "}}");
+        file.close();
+
+        ThemeLoader loader;
+        loader.loadTheme(path, {});
+        const QVariantList palette = loader.terminalPalette();
+        QCOMPARE(palette.size(), 16);
+        QCOMPARE(palette.at(0).value<QColor>(), QColor("#000000"));
+        QCOMPARE(palette.at(15).value<QColor>(), QColor("#f0f0f0"));
+
+        loader.loadTheme("catppuccin-mocha", QStringList{QString(THEMES_DIR)});
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write("{\"special\": {\"background\": \"#000000\", \"foreground\": \"#ffffff\"},"
+                   " \"colors\": {\"color1\": \"#ff0000\"}}");
+        file.close();
+        loader.loadTheme(path, {});
+        QVERIFY(loader.terminalPalette().isEmpty());
+    }
 };
 
 QTEST_MAIN(TestThemeLoader)

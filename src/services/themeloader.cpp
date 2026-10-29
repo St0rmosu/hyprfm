@@ -103,6 +103,7 @@ void ThemeLoader::applyThemeFile(const QString &filePath)
 void ThemeLoader::applyPywalFile(const QString &filePath)
 {
     m_colors = s_defaults;
+    m_terminalPalette.clear();
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "Theme not readable:" << filePath;
@@ -138,6 +139,17 @@ void ThemeLoader::applyPywalFile(const QString &filePath)
         if (c.isValid())
             m_colors[key] = c;
     }
+    // color0..color15 are the terminal palette pywal made the theme for.
+    // All 16 or none, as for TOML themes.
+    QVariantList palette;
+    for (int i = 0; i < 16; ++i) {
+        const QColor c(colors.value(QStringLiteral("color%1").arg(i)).toString());
+        if (!c.isValid())
+            break;
+        palette.append(c);
+    }
+    if (palette.size() == 16)
+        m_terminalPalette = palette;
     emit themeChanged();
 }
 
