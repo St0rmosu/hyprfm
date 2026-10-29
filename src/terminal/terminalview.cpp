@@ -903,6 +903,10 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
+    if (scrollKey(event)) {
+        event->accept();
+        return;
+    }
     if (m_hasSelection)
         clearSelection();
     // Typing jumps back to the prompt from wherever scrollback was.
@@ -1397,13 +1401,50 @@ void TerminalView::wheelEvent(QWheelEvent *event)
 
     GhosttyTerminalScrollViewport scroll{GHOSTTY_SCROLL_VIEWPORT_DELTA, {}};
     scroll.value.delta = -lines;
+    scrollViewport(scroll);
+    event->accept();
+}
+
+void TerminalView::scrollViewport(GhosttyTerminalScrollViewport scroll)
+{
     ghostty_terminal_scroll_viewport(m_terminal, scroll);
     updateScrollbar();
     updateHoverLink();
     if (!m_searchText.isEmpty())
         refreshSearch();   // the highlights follow the viewport
     update();
-    event->accept();
+}
+
+// Shift+PageUp/PageDown page through the scrollback and Shift+Home/End go
+// to its ends, as in GNOME Terminal; Ctrl+Shift+PageUp/PageDown jump
+// between prompts the shell marked (OSC 133: fish does it unasked, bash
+// and zsh with their shell integration). Full-screen programs have no
+// scrollback, so on their screen the keys are theirs.
+bool TerminalView::scrollKey(QKeyEvent *event)
+{
+    GhosttyTerminalScreen screen = GHOSTTY_TERMINAL_SCREEN_PRIMARY;
+    ghostty_terminal_get(m_terminal, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &screen);
+    if (screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE)
+        return false;
+    const Qt::KeyboardModifiers mods = event->modifiers() & ~Qt::KeypadModifier;
+    const int key = event->key();
+    GhosttyTerminalScrollViewport scroll{GHOSTTY_SCROLL_VIEWPORT_DELTA, {}};
+    if (mods == Qt::ShiftModifier && (key == Qt::Key_PageUp || key == Qt::Key_PageDown)) {
+        const intptr_t page = qMax<intptr_t>(1, intptr_t(m_scrollbar.len) - 1);
+        scroll.value.delta = key == Qt::Key_PageUp ? -page : page;
+    } else if (mods == Qt::ShiftModifier && key == Qt::Key_Home) {
+        scroll.tag = GHOSTTY_SCROLL_VIEWPORT_TOP;
+    } else if (mods == Qt::ShiftModifier && key == Qt::Key_End) {
+        scroll.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
+    } else if (mods == (Qt::ControlModifier | Qt::ShiftModifier)
+               && (key == Qt::Key_PageUp || key == Qt::Key_PageDown)) {
+        scroll.tag = GHOSTTY_SCROLL_VIEWPORT_DELTA_PROMPT;
+        scroll.value.delta_prompt = key == Qt::Key_PageUp ? -1 : 1;
+    } else {
+        return false;
+    }
+    scrollViewport(scroll);
+    return true;
 }
 
 void TerminalView::updateScrollbar()
@@ -1420,12 +1461,7 @@ void TerminalView::scrollToRow(qreal row)
 {
     GhosttyTerminalScrollViewport scroll{GHOSTTY_SCROLL_VIEWPORT_ROW, {}};
     scroll.value.row = size_t(qMax(0.0, row));
-    ghostty_terminal_scroll_viewport(m_terminal, scroll);
-    updateScrollbar();
-    updateHoverLink();
-    if (!m_searchText.isEmpty())
-        refreshSearch();
-    update();
+    scrollViewport(scroll);
 }
 
 void TerminalView::setSearchText(const QString &text)

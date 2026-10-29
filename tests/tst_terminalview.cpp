@@ -759,6 +759,40 @@ private slots:
         QCOMPARE(view.scrollOffset() + view.scrollLength(), view.scrollTotal());
     }
 
+    // Shift+PageUp/PageDown page the scrollback, Shift+Home/End go to its
+    // ends, Ctrl+Shift+PageUp/PageDown jump between OSC 133 prompts.
+    void testScrollKeys()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        view.start();
+        view.sendText(QStringLiteral("clear; for p in 1 2; do printf '\\033]133;A\\007P%s\\n' $p; seq 1 60; done; sleep 5\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(view.scrollTotal() > 120, 5000);
+        auto press = [&](int key, Qt::KeyboardModifiers mods) {
+            QKeyEvent event(QEvent::KeyPress, key, mods);
+            QCoreApplication::sendEvent(&view, &event);
+        };
+        const qreal bottom = view.scrollOffset();
+        press(Qt::Key_PageUp, Qt::ShiftModifier);
+        QCOMPARE(view.scrollOffset(), bottom - (view.scrollLength() - 1));
+        press(Qt::Key_PageDown, Qt::ShiftModifier);
+        QCOMPARE(view.scrollOffset(), bottom);
+        press(Qt::Key_Home, Qt::ShiftModifier);
+        QCOMPARE(view.scrollOffset(), 0.0);
+        press(Qt::Key_End, Qt::ShiftModifier);
+        QCOMPARE(view.scrollOffset(), bottom);
+
+        press(Qt::Key_PageUp, Qt::ControlModifier | Qt::ShiftModifier);
+        const qreal second = view.scrollOffset();
+        QVERIFY(second < bottom);
+        press(Qt::Key_PageUp, Qt::ControlModifier | Qt::ShiftModifier);
+        const qreal first = view.scrollOffset();
+        QVERIFY(first < second);
+        QCOMPARE(second - first, 61.0);   // P1 and its 60 lines
+        press(Qt::Key_PageDown, Qt::ControlModifier | Qt::ShiftModifier);
+        QCOMPARE(view.scrollOffset(), second);
+    }
+
     // History past scrollbackLines is dropped (by whole pages, so loosely).
     void testScrollbackLimit()
     {

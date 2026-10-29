@@ -205,6 +205,8 @@ private:
     bool activateLink(const QString &uri);
     void refreshSearch();
     void updateScrollbar();
+    void scrollViewport(GhosttyTerminalScrollViewport scroll);
+    bool scrollKey(QKeyEvent *event);
     void paintSearchMatches(QPainter *painter);
     bool selectionGesture(GhosttySelectionGestureEvent event, QMouseEvent *mouse);
     void clearSelection();
