@@ -548,6 +548,32 @@ private slots:
         QCOMPARE(file.readAll(), QByteArray("\x1b[I\x1b[O"));
     }
 
+    // OSC 52 sets the clipboard; asking to read it ("?") gets nothing, so a
+    // program cannot lift what the user copied.
+    void testOsc52WritesButNeverReadsTheClipboard()
+    {
+        QTemporaryDir dir;
+        TerminalView view;
+        view.setSize(QSizeF(640, 240));
+        QGuiApplication::clipboard()->setText(QStringLiteral("secret"));
+        view.start();
+        // "aGVsbG8=" is base64 for "hello".
+        view.sendText(QStringLiteral("printf '\\033]52;c;aGVsbG8=\\a'\n"));
+        QTRY_COMPARE_WITH_TIMEOUT(QGuiApplication::clipboard()->text(), QStringLiteral("hello"), 5000);
+
+        // A read request: whatever comes back within a second goes to a
+        // file, which must not contain the clipboard.
+        QGuiApplication::clipboard()->setText(QStringLiteral("secret"));
+        const QString out = dir.filePath("reply");
+        view.sendText(QStringLiteral("stty -icanon -echo min 0 time 10; printf '\\033]52;c;?\\a'; dd bs=1 count=64 of='%1' 2>/dev/null; touch '%1.done'\n").arg(out));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(out + ".done"), 5000);
+        QFile file(out);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray reply = file.readAll();
+        QVERIFY2(!reply.contains("c2VjcmV0"), reply.constData());   // base64 "secret"
+        QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("secret"));
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;

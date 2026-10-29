@@ -147,6 +147,7 @@ private:
     static void onTitleChanged(GhosttyTerminal, void *self);
     static void onPwdChanged(GhosttyTerminal, void *self);
     static void onBell(GhosttyTerminal, void *self);
+    static void onClipboardWrite(GhosttyTerminal, void *self, const GhosttyClipboardWrite *write);
 
     GhosttyTerminal m_terminal = nullptr;
     GhosttyRenderState m_renderState = nullptr;

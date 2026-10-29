@@ -238,6 +238,16 @@ TerminalView::TerminalView(QQuickItem *parent)
                          reinterpret_cast<const void *>(&TerminalView::onPwdChanged));
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_BELL,
                          reinterpret_cast<const void *>(&TerminalView::onBell));
+    // Programs may set the clipboard (OSC 52; vim, tmux and neovim over ssh
+    // copy this way), as kitty and Ghostty allow by default. Reading it is
+    // not offered: no read callback is installed, so a program asking gets
+    // nothing back, and any program could otherwise lift whatever the user
+    // last copied. Kitty clipboard transactions are held in memory until
+    // complete, so their size is capped well below the 64 MiB default.
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
+                         reinterpret_cast<const void *>(&TerminalView::onClipboardWrite));
+    const size_t clipboardLimit = 8 * 1024 * 1024;
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE_MAX_BYTES, &clipboardLimit);
     m_bellTimer.setSingleShot(true);
     m_bellTimer.setInterval(120);
     connect(&m_bellTimer, &QTimer::timeout, this, [this] { update(); });
@@ -662,6 +672,38 @@ void TerminalView::onBell(GhosttyTerminal, void *self)
     if (QQuickWindow *window = view->window(); window && !window->isActive())
         window->alert(0);
     Q_EMIT view->bell();
+}
+
+void TerminalView::onClipboardWrite(GhosttyTerminal, void *, const GhosttyClipboardWrite *write)
+{
+    GhosttyClipboardWriteReply reply = GHOSTTY_INIT_SIZED(GhosttyClipboardWriteReply);
+    reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    const QClipboard::Mode mode = write->location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD
+                                      ? QClipboard::Clipboard
+                                      : QClipboard::Selection;
+    if (mode == QClipboard::Selection && !clipboard->supportsSelection()) {
+        write->reply(write, &reply);
+        return;
+    }
+    if (write->contents_len == 0) {
+        clipboard->clear(mode);
+        reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+    }
+    // Text only: what OSC 52 carries, and all a terminal program has any
+    // business putting on the clipboard.
+    for (size_t i = 0; i < write->contents_len; ++i) {
+        const GhosttyClipboardContent &content = write->contents[i];
+        const QByteArray mime(reinterpret_cast<const char *>(content.mime.ptr), qsizetype(content.mime.len));
+        if (!mime.startsWith("text/plain"))
+            continue;
+        clipboard->setText(QString::fromUtf8(reinterpret_cast<const char *>(content.data.ptr),
+                                             qsizetype(content.data.len)),
+                           mode);
+        reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+        break;
+    }
+    write->reply(write, &reply);
 }
 
 bool TerminalView::event(QEvent *event)
