@@ -1040,12 +1040,20 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
-    if (m_hasSelection)
-        clearSelection();
-    // Typing jumps back to the prompt from wherever scrollback was.
-    ghostty_terminal_scroll_viewport(m_terminal, GhosttyTerminalScrollViewport{
-        GHOSTTY_SCROLL_VIEWPORT_BOTTOM, {}});
-    updateScrollbar();
+    // A lone modifier is the start of a shortcut such as Ctrl+Shift+C, not
+    // typing: keep the selection and the scrollback position for it.
+    const int key = event->key();
+    const bool modifierOnly = key == Qt::Key_Control || key == Qt::Key_Shift || key == Qt::Key_Alt
+        || key == Qt::Key_Meta || key == Qt::Key_AltGr || key == Qt::Key_Super_L
+        || key == Qt::Key_Super_R || key == Qt::Key_Hyper_L || key == Qt::Key_Hyper_R;
+    if (!modifierOnly) {
+        if (m_hasSelection)
+            clearSelection();
+        // Typing jumps back to the prompt from wherever scrollback was.
+        ghostty_terminal_scroll_viewport(m_terminal, GhosttyTerminalScrollViewport{
+            GHOSTTY_SCROLL_VIEWPORT_BOTTOM, {}});
+        updateScrollbar();
+    }
     sendKey(event, event->isAutoRepeat() ? GHOSTTY_KEY_ACTION_REPEAT : GHOSTTY_KEY_ACTION_PRESS);
     event->accept();
     update();

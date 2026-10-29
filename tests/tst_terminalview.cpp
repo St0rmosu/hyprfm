@@ -212,7 +212,13 @@ private slots:
         mouse(view, QEvent::MouseButtonRelease, end, 1020, Qt::NoButton);
         QCOMPARE(view.selectedText(), QStringLiteral("hello"));
 
+        // A real keyboard presses Ctrl and Shift on their own first; those
+        // must not drop the selection.
         QGuiApplication::clipboard()->clear();
+        QKeyEvent ctrl(QEvent::KeyPress, Qt::Key_Control, Qt::ControlModifier);
+        QCoreApplication::sendEvent(&view, &ctrl);
+        QKeyEvent shift(QEvent::KeyPress, Qt::Key_Shift, Qt::ControlModifier | Qt::ShiftModifier);
+        QCoreApplication::sendEvent(&view, &shift);
         QKeyEvent copy(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier);
         QCoreApplication::sendEvent(&view, &copy);
         QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("hello"));
