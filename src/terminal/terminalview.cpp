@@ -969,8 +969,9 @@ void TerminalView::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
-    if (combo == QKeyCombination(Qt::ControlModifier, Qt::Key_PageDown)
-        || combo == QKeyCombination(Qt::ControlModifier, Qt::Key_PageUp)) {
+    if (m_tabSwitching
+        && (combo == QKeyCombination(Qt::ControlModifier, Qt::Key_PageDown)
+            || combo == QKeyCombination(Qt::ControlModifier, Qt::Key_PageUp))) {
         Q_EMIT switchTabRequested(event->key() == Qt::Key_PageDown ? 1 : -1);
         event->accept();
         return;

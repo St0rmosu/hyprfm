@@ -18,7 +18,8 @@ Item {
     implicitHeight: 260
 
     signal finished()
-    signal unsafePaste(string text)
+    // The view it came from, so the paste lands there even if tabs change.
+    signal unsafePaste(var view, string text)
     signal linkActivated(string url)
     signal folderActivated(string path)
 
@@ -29,10 +30,10 @@ Item {
     property int nextTabId: 0
     Component.onCompleted: tabs.append({ tabId: nextTabId++ })
 
-    function showTab(index) {
+    function showTab(index, focus) {
         currentIndex = Math.max(0, Math.min(tabs.count - 1, index))
         currentTab = tabRepeater.itemAt(currentIndex)
-        if (currentTab)
+        if (currentTab && focus !== false)
             currentTab.view.forceActiveFocus()
     }
 
@@ -45,21 +46,21 @@ Item {
         view.start()
     }
 
+    // Later, not from inside the closing shell's own signal; and the count
+    // is checked then, so two shells exiting at once still end the panel.
+    // Focus only moves if it was in the closed tab.
     function closeTab(tab) {
-        const index = tabRepeater.indexOfTab(tab)
-        if (index < 0)
-            return
-        if (tabs.count === 1) {
-            panel.finished()
-            return
-        }
-        // Not from inside the closing shell's own signal.
         Qt.callLater(() => {
             const at = tabRepeater.indexOfTab(tab)
             if (at < 0)
                 return
+            if (tabs.count === 1) {
+                panel.finished()
+                return
+            }
+            const hadFocus = tab.view.activeFocus
             tabs.remove(at)
-            showTab(at <= currentIndex ? currentIndex - 1 : currentIndex)
+            showTab(at <= currentIndex ? currentIndex - 1 : currentIndex, hadFocus)
         })
     }
 
@@ -218,7 +219,8 @@ Item {
                 scrollbackLines: config.terminalScrollbackLines
                 windowShortcuts: panel.windowShortcuts
                 onFinished: panel.closeTab(tab)
-                onUnsafePaste: (text) => panel.unsafePaste(text)
+                onUnsafePaste: (text) => panel.unsafePaste(view, text)
+                tabSwitching: tabs.count > 1
                 onLinkActivated: (url) => panel.linkActivated(url)
                 onFolderActivated: (path) => panel.folderActivated(path)
                 matchColor: Theme.warning

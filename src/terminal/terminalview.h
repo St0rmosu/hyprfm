@@ -54,6 +54,9 @@ class TerminalView : public QQuickPaintedItem
     // Whether OSC 9 / OSC 777 notifications go to the desktop's notification
     // server; the notification signal fires either way.
     Q_PROPERTY(bool desktopNotifications MEMBER m_desktopNotifications)
+    // Ctrl+PageUp/PageDown switch tabs only while there are tabs to switch
+    // to; otherwise they go to the program.
+    Q_PROPERTY(bool tabSwitching MEMBER m_tabSwitching)
     // Where the link under the mouse goes (an OSC 8 link's real target, not
     // its text), empty when there is none. Ctrl+click opens it.
     Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged)
@@ -287,6 +290,7 @@ private:
     QString m_cursorStyle = QStringLiteral("block");
     bool m_cursorBlink = false;
     int m_scrollbackLines = 10000;
+    bool m_tabSwitching = false;
     // Blink phase: the cursor is drawn while true. Flipped by m_blinkTimer,
     // which runs only while focused with blinking on.
     bool m_cursorShown = true;

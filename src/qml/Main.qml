@@ -3098,6 +3098,8 @@ ApplicationWindow {
     // The shell has bracketed paste off, so each pasted line would run as
     // soon as it lands.
     property string pendingTerminalPaste: ""
+    // The tab's view; null once that tab has closed.
+    property var pendingTerminalPasteView: null
     Loader {
         id: terminalPasteConfirmDialogLoader
         objectName: "terminalPasteConfirmDialogLoader"
@@ -3113,17 +3115,19 @@ ApplicationWindow {
                     + "gets each line as soon as it is pasted, as if Enter were pressed:\n\n" + root.pendingTerminalPaste.substring(0, 400)
                     + (root.pendingTerminalPaste.length > 400 ? "…" : "")
                 onAccepted: {
-                    const terminal = terminalPanelLoader.item ? terminalPanelLoader.item.terminal : null
+                    const terminal = root.pendingTerminalPasteView
                     if (terminal) {
                         terminal.pasteText(root.pendingTerminalPaste)
                         terminal.forceActiveFocus()
                     }
                     root.pendingTerminalPaste = ""
+                    root.pendingTerminalPasteView = null
                 }
                 onRejected: {
                     root.pendingTerminalPaste = ""
-                    if (terminalPanelLoader.item)
-                        terminalPanelLoader.item.terminal.forceActiveFocus()
+                    if (root.pendingTerminalPasteView)
+                        root.pendingTerminalPasteView.forceActiveFocus()
+                    root.pendingTerminalPasteView = null
                 }
             }
         }
@@ -4521,7 +4525,8 @@ ApplicationWindow {
                             // Not from inside the shell's own signal.
                             Qt.callLater(() => { root.terminalPanelCreated = false })
                         }
-                        function onUnsafePaste(text) {
+                        function onUnsafePaste(view, text) {
+                            root.pendingTerminalPasteView = view
                             root.pendingTerminalPaste = text
                             root.openDialog(terminalPasteConfirmDialogLoader)
                         }

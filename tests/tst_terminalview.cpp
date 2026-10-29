@@ -854,6 +854,9 @@ private slots:
         };
         press(Qt::Key_T, Qt::ControlModifier | Qt::ShiftModifier);
         press(Qt::Key_W, Qt::ControlModifier | Qt::ShiftModifier);
+        press(Qt::Key_PageUp, Qt::ControlModifier);   // one tab: the program's
+        QCOMPARE(switchTab.count(), 0);
+        view.setProperty("tabSwitching", true);
         press(Qt::Key_PageUp, Qt::ControlModifier);
         QCOMPARE(newTab.count(), 1);
         QCOMPARE(closeTab.count(), 1);
