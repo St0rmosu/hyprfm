@@ -502,6 +502,23 @@ private slots:
         QVERIFY(dashed.litColumns < width * 0.7 && dashed.litColumns > width * 0.3);
     }
 
+    // BEL flashes the view once, however fast it rings.
+    void testBellFlashes()
+    {
+        TerminalView view;
+        view.setSize(QSizeF(320, 120));
+        view.setBackground(Qt::black);
+        view.setForeground(Qt::white);
+        QSignalSpy bell(&view, &TerminalView::bell);
+        view.start();
+        view.sendText(QStringLiteral("clear; printf '\\a\\a\\a'; sleep 5\n"));
+        QTRY_COMPARE_WITH_TIMEOUT(bell.count(), 1, 5000);
+        render(view);
+        QVERIFY(qGray(render(view).pixel(300, 100)) > 10);   // tinted
+        QTRY_VERIFY(qGray(render(view).pixel(300, 100)) == 0);   // and back
+        QCOMPARE(bell.count(), 1);
+    }
+
     void testExitEndsTheSession()
     {
         TerminalView view;

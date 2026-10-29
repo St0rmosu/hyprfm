@@ -13,6 +13,7 @@
 #include <QKeySequence>
 #include <QPainter>
 #include <QPainterPath>
+#include <QQuickWindow>
 #include <QSocketNotifier>
 #include <QStyleHints>
 #include <QUrl>
@@ -235,6 +236,11 @@ TerminalView::TerminalView(QQuickItem *parent)
                          reinterpret_cast<const void *>(&TerminalView::onTitleChanged));
     ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_PWD_CHANGED,
                          reinterpret_cast<const void *>(&TerminalView::onPwdChanged));
+    ghostty_terminal_set(m_terminal, GHOSTTY_TERMINAL_OPT_BELL,
+                         reinterpret_cast<const void *>(&TerminalView::onBell));
+    m_bellTimer.setSingleShot(true);
+    m_bellTimer.setInterval(120);
+    connect(&m_bellTimer, &QTimer::timeout, this, [this] { update(); });
     applyColors();
 }
 
@@ -643,6 +649,19 @@ void TerminalView::onPwdChanged(GhosttyTerminal terminal, void *self)
     const QUrl url(pwd);
     view->m_shellDirectory = url.isLocalFile() ? url.path(QUrl::FullyDecoded) : pwd;
     Q_EMIT view->shellDirectoryChanged();
+}
+
+void TerminalView::onBell(GhosttyTerminal, void *self)
+{
+    auto *view = static_cast<TerminalView *>(self);
+    // A program ringing in a loop gets one flash per interval, not a strobe.
+    if (view->m_bellTimer.isActive())
+        return;
+    view->m_bellTimer.start();
+    view->update();
+    if (QQuickWindow *window = view->window(); window && !window->isActive())
+        window->alert(0);
+    Q_EMIT view->bell();
 }
 
 bool TerminalView::event(QEvent *event)
@@ -1184,6 +1203,12 @@ void TerminalView::paint(QPainter *painter)
         }
         flush();
         y += m_cellHeight;
+    }
+
+    if (m_bellTimer.isActive()) {
+        QColor tint = qcolor(colors.foreground);
+        tint.setAlphaF(0.12);
+        painter->fillRect(boundingRect(), tint);
     }
 
     bool cursorVisible = false;

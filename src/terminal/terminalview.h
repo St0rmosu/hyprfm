@@ -107,6 +107,9 @@ signals:
     void colorsChanged();
     void finished();
     void unsafePaste(const QString &text);
+    // BEL from the program. The view flashes and, in a window in the
+    // background, asks the compositor for attention itself.
+    void bell();
 
 protected:
     bool event(QEvent *event) override;
@@ -142,6 +145,7 @@ private:
     static bool onSize(GhosttyTerminal, void *self, GhosttySizeReportSize *out);
     static void onTitleChanged(GhosttyTerminal, void *self);
     static void onPwdChanged(GhosttyTerminal, void *self);
+    static void onBell(GhosttyTerminal, void *self);
 
     GhosttyTerminal m_terminal = nullptr;
     GhosttyRenderState m_renderState = nullptr;
@@ -175,6 +179,8 @@ private:
     // which runs only while focused with blinking on.
     bool m_cursorShown = true;
     QTimer m_blinkTimer;
+    // Visual bell: the view is tinted while this single-shot timer runs.
+    QTimer m_bellTimer;
     // Regular, bold, italic, bold italic: m_font fitted to the cell grid.
     QFont m_cellFonts[4];
     QColor m_foreground = QColor(0xcd, 0xd6, 0xf4);
