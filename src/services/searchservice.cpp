@@ -120,6 +120,9 @@ void SearchService::cancelSearch()
     const bool hadActiveSearch = m_searching || m_fdProcess || m_workerThread;
 
     if (m_fdProcess) {
+        // waitForFinished() still delivers readyRead; output of a cancelled
+        // search must not reach the model (which may already be gone).
+        m_fdProcess->disconnect(this);
         m_fdProcess->kill();
         m_fdProcess->waitForFinished(1000);
         delete m_fdProcess;
