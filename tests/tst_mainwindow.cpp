@@ -304,6 +304,7 @@ private slots:
     // background.
     void testToolbarTooltipShowsShortcut()
     {
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("Binding loop")));
         App app;
         QVERIFY(app.load());
         QQuickItem *grid = app.item(QStringLiteral("viewModeButton_grid"));
@@ -322,6 +323,10 @@ private slots:
         const QVariantMap remapped{{QStringLiteral("grid_view"), QStringLiteral("Ctrl+9")}};
         QVERIFY(QMetaObject::invokeMethod(config, "saveShortcuts", Q_ARG(QVariantMap, remapped)));
         QTRY_VERIFY(App::findText(app.window->contentItem(), "Grid view  (Ctrl+9)"));
+
+        // Leaving fades the tooltip out and then unloads it.
+        QTest::mouseMove(app.window, QPoint(app.window->width() / 2, app.window->height() / 2));
+        QTRY_VERIFY(!App::findText(app.window->contentItem(), "Grid view  (Ctrl+9)"));
     }
 
     // Every dropdown in Settings is fed by a list built in

@@ -19,11 +19,16 @@ Loader {
     readonly property string sequence: keys !== "" ? keys
         : (action !== "" && config.shortcutMap[action] ? config.shortcutMap[action] : "")
 
-    // Stays loaded until the tooltip has finished fading out.
-    active: text !== "" && (shown || (item !== null && item.visible))
+    // Set while the popup is on screen, so it stays loaded until it has
+    // finished fading out. Reading item.visible here instead loops.
+    property bool _onScreen: false
+
+    active: text !== "" && (shown || _onScreen)
     sourceComponent: Q.Tooltip {
         parent: root.parent
         visible: root.shown
+        onAboutToShow: root._onScreen = true
+        onClosed: root._onScreen = false
         margins: 4
         // Same opaque surface as the menus and the sidebar device tooltip.
         background: Rectangle {
