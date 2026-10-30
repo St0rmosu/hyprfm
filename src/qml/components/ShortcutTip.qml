@@ -19,10 +19,11 @@ Loader {
     readonly property string sequence: keys !== "" ? keys
         : (action !== "" && config.shortcutMap[action] ? config.shortcutMap[action] : "")
 
-    active: shown && text !== ""
+    // Stays loaded until the tooltip has finished fading out.
+    active: text !== "" && (shown || (item !== null && item.visible))
     sourceComponent: Q.Tooltip {
         parent: root.parent
-        visible: true
+        visible: root.shown
         margins: 4
         // Same opaque surface as the menus and the sidebar device tooltip.
         background: Rectangle {
