@@ -59,6 +59,9 @@ Item {
     FontMetrics { id: smallFont; font.pointSize: Theme.fontSmall }
     FontMetrics { id: subShortcutFont; font.pixelSize: 11 }
 
+    // The key an item's action is bound to, so a remapped shortcut shows.
+    function keys(action) { return config.shortcutMap[action] || "" }
+
     // With the built-in terminal compiled in, menus offer the kind of
     // terminal Open in Terminal does not use (see builtin_terminal).
     function otherTerminalItems() {
@@ -675,18 +678,18 @@ Item {
             items.push({ separator: true })
         }
         if (!isEmptySpace && targetPath !== "") {
-            items.push({ text: "Open", shortcut: config.shortcutMap["open"] || "Return", action: "open", icon: "ExternalLink" })
+            items.push({ text: "Open", shortcut: keys("open"), action: "open", icon: "ExternalLink" })
             if (targetIsDir)
-                items.push({ text: "Open in New Tab", shortcut: "", action: "opennewtab", icon: "Folder" })
+                items.push({ text: "Open in New Tab", shortcut: keys("open_in_new_tab"), action: "opennewtab", icon: "Folder" })
             if (!splitViewEnabled && !isTrashView) {
                 items.push({
                     text: targetIsDir ? "Open in Split View" : "Split View Here",
-                    shortcut: "",
+                    shortcut: keys(targetIsDir ? "open_in_split" : "split_view"),
                     action: targetIsDir ? "split_open" : "split_here",
                     icon: "SquareSplitHorizontal"
                 })
             } else if (splitViewEnabled) {
-                items.push({ text: "Close Split View", shortcut: "", action: "close_split", icon: "SquareSplitHorizontal" })
+                items.push({ text: "Close Split View", shortcut: keys("split_view"), action: "close_split", icon: "SquareSplitHorizontal" })
             }
             var mime = ""
             if (!targetIsDir && fileModel) {
@@ -701,7 +704,7 @@ Item {
                 }
             }
             if (targetIsDir && !isTrashView && !remoteContext) {
-                items.push({ text: "Open in Terminal", shortcut: "", action: "terminal", icon: "Terminal" })
+                items.push({ text: "Open in Terminal", shortcut: keys("open_terminal"), action: "terminal", icon: "Terminal" })
                 items.push(...otherTerminalItems())
             }
             if (!targetIsDir && !isTrashView && !remoteContext && fileOps.isExecutable(targetPath)) {
@@ -720,8 +723,8 @@ Item {
                 items.push({ text: "Restore", shortcut: "", action: "restore", icon: "Undo" })
                 items.push({ text: "Delete Permanently", shortcut: "Delete", action: "delete", icon: "Trash", destructive: true })
             } else {
-                items.push({ text: "Cut", shortcut: "Ctrl+X", action: "cut", icon: "Scissors" })
-                items.push({ text: "Copy", shortcut: "Ctrl+C", action: "copy", icon: "Copy" })
+                items.push({ text: "Cut", shortcut: keys("cut"), action: "cut", icon: "Scissors" })
+                items.push({ text: "Copy", shortcut: keys("copy"), action: "copy", icon: "Copy" })
                 items.push({ text: "Copy Path", shortcut: "", action: "copypath", icon: "CopyPath" })
                 items.push({ separator: true })
 
@@ -754,22 +757,22 @@ Item {
                 items.push({ separator: true })
                 items.push({
                     text: effectivePaths.length > 1 ? "Bulk Rename..." : "Rename...",
-                    shortcut: config.shortcutMap["rename"] || "",
+                    shortcut: keys("rename"),
                     action: effectivePaths.length > 1 ? "bulkrename" : "rename",
                     icon: "FolderPen"
                 })
-                items.push({ text: "Move to Trash", shortcut: "Delete", action: "trash", icon: "Trash", destructive: true })
+                items.push({ text: "Move to Trash", shortcut: keys("trash"), action: "trash", icon: "Trash", destructive: true })
             }
             items.push({ separator: true })
-            items.push({ text: "Properties", shortcut: "", action: "properties", icon: "Info" })
+            items.push({ text: "Properties", shortcut: keys("properties"), action: "properties", icon: "Info" })
         } else {
-            items.push({ text: "Select All", shortcut: "Ctrl+A", action: "selectall", icon: "Check" })
+            items.push({ text: "Select All", shortcut: keys("select_all"), action: "selectall", icon: "Check" })
             items.push({ separator: true })
             items.push({ text: "View", shortcut: "", action: "view_toggle", isSubmenu: true, icon: "Eye",
                 submenuItems: [
-                    { text: "Grid", shortcut: "Ctrl+1", action: "view_grid", checked: currentViewMode === "grid", icon: "Grid" },
-                    { text: "Miller", shortcut: "Ctrl+2", action: "view_miller", checked: currentViewMode === "miller", icon: "Columns3" },
-                    { text: "Detailed", shortcut: "Ctrl+3", action: "view_detailed", checked: currentViewMode === "detailed", icon: "AlignJustify" }
+                    { text: "Grid", shortcut: keys("grid_view"), action: "view_grid", checked: currentViewMode === "grid", icon: "Grid" },
+                    { text: "Miller", shortcut: keys("miller_view"), action: "view_miller", checked: currentViewMode === "miller", icon: "Columns3" },
+                    { text: "Detailed", shortcut: keys("detailed_view"), action: "view_detailed", checked: currentViewMode === "detailed", icon: "AlignJustify" }
                 ]
             })
             items.push({ text: "Sort By", shortcut: "", action: "sort_toggle", isSubmenu: true, icon: "SlidersH",
@@ -785,29 +788,29 @@ Item {
             })
             if (!isTrashView) {
                 items.push({ separator: true })
-                items.push({ text: "New Folder...", shortcut: config.shortcutMap["new_folder"] || "", action: "newfolder", icon: "Folder" })
-                items.push({ text: "New File...", shortcut: config.shortcutMap["new_file"] || "", action: "newfile", icon: "FileText" })
+                items.push({ text: "New Folder...", shortcut: keys("new_folder"), action: "newfolder", icon: "Folder" })
+                items.push({ text: "New File...", shortcut: keys("new_file"), action: "newfile", icon: "FileText" })
                 items.push({ separator: true })
                 if (clipboard.hasContent || (!remoteContext && fileOps.hasClipboardImage())) {
                     items.push({
                         text: clipboard.hasContent ? "Paste" : "Paste Image",
-                        shortcut: "Ctrl+V",
+                        shortcut: keys("paste"),
                         action: "paste",
                         icon: clipboard.hasContent ? "Clipboard" : "Image"
                     })
                 }
                 if (!splitViewEnabled)
-                    items.push({ text: "Split View Here", shortcut: "", action: "split_here", icon: "SquareSplitHorizontal" })
+                    items.push({ text: "Split View Here", shortcut: keys("split_view"), action: "split_here", icon: "SquareSplitHorizontal" })
                 else {
-                    items.push({ text: "Close Split View", shortcut: "", action: "close_split", icon: "SquareSplitHorizontal" })
+                    items.push({ text: "Close Split View", shortcut: keys("split_view"), action: "close_split", icon: "SquareSplitHorizontal" })
                     items.push({ text: "Save Split to Sidebar", shortcut: "", action: "save_current_split", icon: "Bookmark" })
                 }
                 items.push({ separator: true })
                 if (!remoteContext) {
-                    items.push({ text: "Open in Terminal", shortcut: "", action: "terminal", icon: "Terminal" })
+                    items.push({ text: "Open in Terminal", shortcut: keys("open_terminal"), action: "terminal", icon: "Terminal" })
                     items.push(...otherTerminalItems())
                 }
-                items.push({ text: "Properties", shortcut: "", action: "properties", icon: "Info" })
+                items.push({ text: "Properties", shortcut: keys("properties"), action: "properties", icon: "Info" })
             } else {
                 items.push({ separator: true })
                 items.push({ text: "Empty Trash", shortcut: "", action: "emptytrash", icon: "Trash", destructive: true })
