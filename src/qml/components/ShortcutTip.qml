@@ -24,6 +24,13 @@ Loader {
         parent: root.parent
         visible: true
         margins: 4
+        // Same opaque surface as the menus and the sidebar device tooltip.
+        background: Rectangle {
+            color: Qt.rgba(Theme.crust.r, Theme.crust.g, Theme.crust.b, 1.0)
+            radius: Theme.radiusSmall
+            border.width: 1
+            border.color: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.14)
+        }
         text: root.sequence !== "" ? root.text + "  (" + root.sequence + ")" : root.text
         // Below the control, or above it when the window ends first.
         y: {
