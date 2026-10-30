@@ -317,6 +317,11 @@ private slots:
         QQuickItem *label = App::findText(app.window->contentItem(), text);
         QTRY_VERIFY(label->isVisible() && label->parentItem()->width() > label->implicitWidth());
         QVERIFY(label->parentItem()->height() > label->implicitHeight());
+
+        // Shortcuts are user settings: a remap shows without a restart.
+        const QVariantMap remapped{{QStringLiteral("grid_view"), QStringLiteral("Ctrl+9")}};
+        QVERIFY(QMetaObject::invokeMethod(config, "saveShortcuts", Q_ARG(QVariantMap, remapped)));
+        QTRY_VERIFY(App::findText(app.window->contentItem(), "Grid view  (Ctrl+9)"));
     }
 
     // Every dropdown in Settings is fed by a list built in

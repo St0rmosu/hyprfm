@@ -64,11 +64,14 @@ Item {
 
     // With the built-in terminal compiled in, menus offer the kind of
     // terminal Open in Terminal does not use (see builtin_terminal).
-    function otherTerminalItems() {
+    // F4 opens the built-in panel at the current folder, so its key only
+    // fits the menu for the current folder.
+    function otherTerminalItems(currentFolder) {
         if (typeof hyprfmBuiltinTerminal === "undefined" || !hyprfmBuiltinTerminal)
             return []
         return [{ text: config.builtinTerminal ? "Open in External Terminal" : "Open in Built-in Terminal",
-                  shortcut: "", action: "terminal_other", icon: "Terminal" }]
+                  shortcut: currentFolder && !config.builtinTerminal ? keys("toggle_terminal") : "",
+                  action: "terminal_other", icon: "Terminal" }]
     }
 
     function itemRowWidth(item) {
@@ -705,7 +708,7 @@ Item {
             }
             if (targetIsDir && !isTrashView && !remoteContext) {
                 items.push({ text: "Open in Terminal", shortcut: keys("open_terminal"), action: "terminal", icon: "Terminal" })
-                items.push(...otherTerminalItems())
+                items.push(...otherTerminalItems(false))
             }
             if (!targetIsDir && !isTrashView && !remoteContext && fileOps.isExecutable(targetPath)) {
                 items.push({ text: "Run", shortcut: "", action: "run", icon: "Play" })
@@ -721,7 +724,7 @@ Item {
             items.push({ separator: true })
             if (isTrashView) {
                 items.push({ text: "Restore", shortcut: "", action: "restore", icon: "Undo" })
-                items.push({ text: "Delete Permanently", shortcut: "Delete", action: "delete", icon: "Trash", destructive: true })
+                items.push({ text: "Delete Permanently", shortcut: keys("trash"), action: "delete", icon: "Trash", destructive: true })
             } else {
                 items.push({ text: "Cut", shortcut: keys("cut"), action: "cut", icon: "Scissors" })
                 items.push({ text: "Copy", shortcut: keys("copy"), action: "copy", icon: "Copy" })
@@ -808,7 +811,7 @@ Item {
                 items.push({ separator: true })
                 if (!remoteContext) {
                     items.push({ text: "Open in Terminal", shortcut: keys("open_terminal"), action: "terminal", icon: "Terminal" })
-                    items.push(...otherTerminalItems())
+                    items.push(...otherTerminalItems(true))
                 }
                 items.push({ text: "Properties", shortcut: keys("properties"), action: "properties", icon: "Info" })
             } else {
