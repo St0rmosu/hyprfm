@@ -333,6 +333,21 @@ private slots:
     // syncFromCurrentState(). Miss one and the control renders empty with no
     // error anywhere, which is exactly how the light/dark theme pickers
     // shipped blank.
+    // #60: Settings has an About page with the running version.
+    void testSettingsAboutShowsVersion()
+    {
+        QCoreApplication::setApplicationVersion(QStringLiteral("v9.9.9-test"));
+        App app;
+        QVERIFY(app.load());
+        QVERIFY(QMetaObject::invokeMethod(app.window, "openSettingsPanel"));
+        QObject *panel = app.window->findChild<QObject *>(QStringLiteral("settingsPanel"));
+        QVERIFY(panel);
+        QVERIFY(QMetaObject::invokeMethod(panel, "showSection", Q_ARG(QVariant, 4)));
+        auto *panelWindow = qobject_cast<QQuickWindow *>(panel);
+        QVERIFY(panelWindow);
+        QTRY_VERIFY(App::findText(panelWindow->contentItem(), QStringLiteral("v9.9.9-test")));
+    }
+
     void testSettingsDropdownsAreAllPopulated()
     {
         App app;

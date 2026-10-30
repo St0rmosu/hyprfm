@@ -705,6 +705,7 @@ int main(int argc, char *argv[])
 
     QGuiApplication app(argc, argv);
     app.setApplicationName("HyprFM");
+    app.setApplicationVersion(QStringLiteral(HYPRFM_VERSION));
     app.setOrganizationName("hyprfm");
     app.setDesktopFileName("hyprfm");
 

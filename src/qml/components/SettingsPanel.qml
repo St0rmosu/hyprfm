@@ -164,6 +164,9 @@ Window {
     Component { id: layoutSectionIcon; IconPanelLeft {} }
     Component { id: motionSectionIcon; IconClock {} }
     Component { id: toolsSectionIcon; IconFolder {} }
+    Component { id: aboutSectionIcon; IconInfo {} }
+
+    readonly property string repositoryUrl: "https://github.com/soyeb-jim285/hyprfm"
 
     property int currentSectionIndex: 0
     readonly property bool compactNavigation: dialogWidth < 860
@@ -171,13 +174,15 @@ Window {
         { title: "Look & Feel", iconComponent: paletteSectionIcon },
         { title: "Layout", iconComponent: layoutSectionIcon },
         { title: "Motion", iconComponent: motionSectionIcon },
-        { title: "Tools", iconComponent: toolsSectionIcon }
+        { title: "Tools", iconComponent: toolsSectionIcon },
+        { title: "About", iconComponent: aboutSectionIcon }
     ]
     readonly property var sectionItems: [
         { title: "Look & Feel", subtitle: "Theme, typography, icons, and surface styling.", iconComponent: paletteSectionIcon },
         { title: "Layout", subtitle: "Sidebar behavior, file visibility, and toolbar controls.", iconComponent: layoutSectionIcon },
         { title: "Motion", subtitle: "Animation timing and easing across the interface.", iconComponent: motionSectionIcon },
-        { title: "Tools", subtitle: "Shortcuts, remote locations, and config behavior.", iconComponent: toolsSectionIcon }
+        { title: "Tools", subtitle: "Shortcuts, remote locations, and config behavior.", iconComponent: toolsSectionIcon },
+        { title: "About", subtitle: "Version, license, and where HyprFM lives.", iconComponent: aboutSectionIcon }
     ]
 
     function showSection(index) {
@@ -1357,6 +1362,122 @@ Window {
         }
     }
 
+    Component {
+        id: aboutPageComponent
+
+        ColumnLayout {
+            width: pageLoader.width
+            spacing: 6
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.bottomMargin: 12
+                spacing: 16
+
+                Image {
+                    source: "qrc:/HyprFM/io.github.soyeb_jim285.HyprFM.svg"
+                    sourceSize: Qt.size(64, 64)
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 64
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    Text {
+                        text: "HyprFM"
+                        color: Theme.text
+                        font.pointSize: Theme.fontLarge + 2
+                        font.bold: true
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "A fast, keyboard-friendly file manager for Hyprland and Wayland desktops."
+                        color: Theme.subtext
+                        font.pointSize: Theme.fontNormal
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
+            Text {
+                text: "Details"
+                color: Theme.accent
+                font.pointSize: Theme.fontSmall
+                font.bold: true
+                Layout.bottomMargin: 4
+            }
+
+            Repeater {
+                model: [
+                    { label: "Version", value: Qt.application.version },
+                    { label: "License", value: "MIT" }
+                ]
+
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 24
+
+                    Text {
+                        Layout.preferredWidth: 80
+                        text: parent.modelData.label
+                        color: Theme.subtext
+                        font.pointSize: Theme.fontNormal
+                    }
+
+                    // Selectable, so a version can be pasted into a bug report.
+                    TextEdit {
+                        Layout.fillWidth: true
+                        text: parent.modelData.value
+                        readOnly: true
+                        selectByMouse: true
+                        color: Theme.text
+                        selectionColor: Theme.accent
+                        selectedTextColor: Theme.base
+                        font.pointSize: Theme.fontNormal
+                    }
+                }
+            }
+
+            Text {
+                text: "Links"
+                color: Theme.accent
+                font.pointSize: Theme.fontSmall
+                font.bold: true
+                Layout.topMargin: 12
+                Layout.bottomMargin: 4
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                Q.Button {
+                    Layout.fillWidth: true
+                    text: "Source Code"
+                    onClicked: Qt.openUrlExternally(root.repositoryUrl)
+                }
+
+                Q.Button {
+                    Layout.fillWidth: true
+                    text: "Report an Issue"
+                    variant: "ghost"
+                    onClicked: Qt.openUrlExternally(root.repositoryUrl + "/issues")
+                }
+
+                Q.Button {
+                    Layout.fillWidth: true
+                    text: "License"
+                    variant: "ghost"
+                    onClicked: Qt.openUrlExternally(root.repositoryUrl + "/blob/main/LICENSE")
+                }
+            }
+        }
+    }
+
     Item {
         id: pageContainer
         anchors.fill: parent
@@ -1514,7 +1635,9 @@ Window {
                                             ? layoutPageComponent
                                             : root.currentSectionIndex === 2
                                                 ? motionPageComponent
-                                                : toolsPageComponent
+                                                : root.currentSectionIndex === 3
+                                                    ? toolsPageComponent
+                                                    : aboutPageComponent
                                 }
                             }
                         }

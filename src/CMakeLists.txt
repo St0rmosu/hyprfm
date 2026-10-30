@@ -197,6 +197,13 @@ endif()
 
 qt_add_qml_module(hyprfm ${hyprfm_qml_module_args})
 
+# The app logo, for the About page; the installed copy is only in the icon
+# theme once HyprFM is installed.
+qt_add_resources(hyprfm "logo"
+    PREFIX "/HyprFM"
+    BASE "${CMAKE_SOURCE_DIR}/dist"
+    FILES "${CMAKE_SOURCE_DIR}/dist/io.github.soyeb_jim285.HyprFM.svg")
+
 # Quill (the src/qml/Quill submodule) is compiled in as its own QML module,
 # like HyprFM, rather than found on disk through import paths. From disk it
 # was parsed at runtime, cached by path (so an AppImage, mounted somewhere new
@@ -271,10 +278,31 @@ target_include_directories(hyprfm PRIVATE
 
 set(HYPRFM_DATA_DIR "${CMAKE_SOURCE_DIR}" CACHE STRING "Runtime data directory for themes and QML")
 
+# Builds from git (the AUR -git package, local builds) say which commit
+# they are; a release tarball has no .git and keeps the project version.
+# ponytail: read at configure time, so a local build tree only picks up new
+# commits on its next cmake run.
+set(HYPRFM_VERSION_STRING "${PROJECT_VERSION}")
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" describe --tags --dirty
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE _hyprfm_git_version
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE _hyprfm_git_result)
+    # "v0.6.1-307-g1d5600c" -> "0.6.1-307-g1d5600c"; a clone without tags
+    # fails and keeps the project version.
+    if(_hyprfm_git_result EQUAL 0 AND _hyprfm_git_version)
+        string(REGEX REPLACE "^v" "" HYPRFM_VERSION_STRING "${_hyprfm_git_version}")
+    endif()
+endif()
+
 target_compile_definitions(hyprfm PRIVATE
     HYPRFM_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     HYPRFM_DATA_DIR="${HYPRFM_DATA_DIR}"
-    HYPRFM_VERSION="${PROJECT_VERSION}"
+    HYPRFM_VERSION="${HYPRFM_VERSION_STRING}"
 )
 
 if(KF6WindowSystem_FOUND)
