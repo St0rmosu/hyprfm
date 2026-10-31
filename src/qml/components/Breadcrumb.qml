@@ -69,9 +69,10 @@ Item {
             return
 
         var suggestion = suggestionItems[index]
+        // Setting the text rebuilds suggestionItems, so the old index means
+        // nothing now: Return opens the completed text.
         pathInput.text = suggestion.displayPath || suggestion.path || ""
         pathInput.cursorPosition = pathInput.text.length
-        suggestionIndex = index
 
         if (navigateNow)
             commitNavigation(suggestion.path || pathInput.text)

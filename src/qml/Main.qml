@@ -336,6 +336,16 @@ ApplicationWindow {
         return tabModel.activeTab ? tabModel.activeTab.splitViewEnabled : false
     }
 
+    // Focus requests are held off while the path bar is open; hand focus
+    // back to the pane once it closes (Esc, Enter, or a click elsewhere).
+    Connections {
+        target: toolbar
+        function onPathEditingChanged() {
+            if (!toolbar.pathEditing)
+                root.scheduleActivePaneFocus()
+        }
+    }
+
     // Bumped on every bookmark change, including a config reload that swaps
     // one split for another without changing the count.
     property int bookmarksRevision: 0

@@ -1018,6 +1018,9 @@ private slots:
         QTest::keyClick(app.window, Qt::Key_Escape);
         QVERIFY(!bar->property("editMode").toBool());
         QCOMPARE(app.tabModel->activeTab()->currentPath(), original);
+        // Focus goes back to the files, so the keyboard works straight away.
+        auto *grid = app.item("primaryFileView")->property("gridViewItem").value<QQuickItem *>();
+        QTRY_VERIFY(grid->hasActiveFocus());
     }
 
     void testPathBarNavigatesTypedDirectory_data()
@@ -1090,6 +1093,28 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(app.window, "goHome"));
         QTRY_VERIFY(!tab->splitViewEnabled());
         QTRY_COMPARE(tab->currentPath(), QDir::homePath());
+    }
+
+    // Tab rebuilds the suggestion list for the completed text; the index of
+    // the row picked before must not survive into the new list.
+    void testPathBarTabThenReturnOpensCompletedPath()
+    {
+        App app;
+        QVERIFY(app.load());
+        for (const char *name : {"Dall", "Dbox", "Dcar"})
+            QVERIFY(QDir().mkpath(app.home.path() + "/" + name));
+        QTest::keyClick(app.window, Qt::Key_L, Qt::ControlModifier);
+        QQuickItem *bar = app.item("breadcrumb");
+        QTRY_VERIFY(bar->property("editMode").toBool());
+        app.item("pathInput")->setProperty("text", app.home.path() + "/D");
+        QCOMPARE(bar->property("suggestionItems").toList().size(), 3);
+        QTest::keyClick(app.window, Qt::Key_Down);
+        QTest::keyClick(app.window, Qt::Key_Down);
+        QTest::keyClick(app.window, Qt::Key_Down);
+        const QString picked = bar->property("suggestionItems").toList().at(2).toMap().value("path").toString();
+        QTest::keyClick(app.window, Qt::Key_Tab);
+        QTest::keyClick(app.window, Qt::Key_Return);
+        QTRY_COMPARE(QDir::cleanPath(app.tabModel->activeTab()->currentPath()), QDir::cleanPath(picked));
     }
 
     // Completing "~/..." offers and inserts "~" paths, not the expanded home.
