@@ -1024,7 +1024,7 @@ private slots:
     void testPathBarNavigatesTypedDirectory_data()
     {
         QTest::addColumn<QString>("inputKind");
-        for (const char *kind : {"absolute", "relative", "tilde", "completion", "secondary"})
+        for (const char *kind : {"absolute", "relative", "colon", "tilde", "completion", "secondary"})
             QTest::newRow(kind) << QString::fromLatin1(kind);
     }
 
@@ -1033,7 +1033,8 @@ private slots:
         QFETCH(QString, inputKind);
         App app;
         QVERIFY(app.load());
-        const QString target = app.home.path() + "/Folder with spaces";
+        // "v1:old" looks like a URI scheme but is a folder in the current one.
+        const QString target = app.home.path() + (inputKind == "colon" ? "/v1:old" : "/Folder with spaces");
         QVERIFY(QDir().mkpath(target + "/child"));
         auto *tab = app.tabModel->activeTab();
         tab->navigateTo(app.home.path());
@@ -1050,6 +1051,7 @@ private slots:
         QQuickItem *input = app.item("pathInput");
         QVERIFY(input);
         const QString typed = inputKind == "relative" ? "Folder with spaces/"
+            : inputKind == "colon" ? "v1:old"
             : inputKind == "tilde" ? "~/"
             : inputKind == "completion" ? target.left(target.size() - 3)
             : target + "/";
@@ -1064,6 +1066,26 @@ private slots:
             QCOMPARE(tab->currentPath(), app.home.path());
             QVERIFY(tab->splitViewEnabled());
         }
+    }
+
+    // Completing "~/..." offers and inserts "~" paths, not the expanded home.
+    void testPathBarCompletionKeepsTilde()
+    {
+        App app;
+        QVERIFY(app.load());
+        QTest::keyClick(app.window, Qt::Key_L, Qt::ControlModifier);
+        QQuickItem *bar = app.item("breadcrumb");
+        QTRY_VERIFY(bar->property("editMode").toBool());
+        app.item("pathInput")->setProperty("text", "~/");
+        const QVariantList items = bar->property("suggestionItems").toList();
+        if (items.isEmpty())
+            QSKIP("home has no folders to suggest");
+        for (const QVariant &item : items) {
+            const QString shown = item.toMap().value("displayPath").toString();
+            QVERIFY2(shown.startsWith("~"), qPrintable(shown));
+        }
+        // Nothing is picked until the user chooses, so Return opens what was typed.
+        QCOMPARE(bar->property("suggestionIndex").toInt(), -1);
     }
 
     // Quick preview is created the first time Space is pressed rather than at

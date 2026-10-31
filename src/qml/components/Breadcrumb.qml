@@ -21,8 +21,10 @@ Item {
             return fsModel.homePath()
         if (trimmed.startsWith("~/"))
             return fsModel.homePath() + trimmed.substring(1)
+        // Anything else that is not a URI ("sftp://", "trash:///") is a folder
+        // in the current one; "v1:old" is a folder name, not a scheme.
         if (trimmed !== "" && !trimmed.startsWith("/")
-                && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed))
+                && !/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed))
             return (root.isRecentsView ? fsModel.homePath() : root.path).replace(/\/$/, "") + "/" + trimmed
         return trimmed
     }
@@ -44,7 +46,10 @@ Item {
             return
         }
 
-        suggestionItems = fsModel.pathSuggestions(normalizedInputPath(query), query.endsWith("/") ? -1 : 8)
+        // pathSuggestions keeps a typed "~" in what it offers, so only a
+        // relative path is resolved here.
+        suggestionItems = fsModel.pathSuggestions(query.startsWith("~") ? query : normalizedInputPath(query),
+                                                  query.endsWith("/") ? -1 : 8)
         // Return opens what was typed until a suggestion is explicitly chosen.
         suggestionIndex = -1
     }
@@ -369,7 +374,6 @@ Item {
                         id: mouseArea
                         anchors.fill: parent
                         hoverEnabled: true
-                        onEntered: root.suggestionIndex = index
                         onClicked: root.applySuggestion(index, true)
                     }
                 }
