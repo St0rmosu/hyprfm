@@ -84,7 +84,7 @@ class TestMainWindow : public QObject
             tabModel = new TabListModel(&owner);
             bookmarks = new BookmarkModel(&owner);
             QObject::connect(bookmarks, &BookmarkModel::bookmarksChanged, config, [this, config] {
-                config->saveBookmarksAndSplits(bookmarks->paths(), bookmarks->names(), bookmarks->savedSplits());
+                config->saveBookmarks(bookmarks->paths(), bookmarks->names(), bookmarks->savedSplits());
             });
             auto *fileOps = new FileOperations(&owner);
             auto *undoManager = new UndoManager(fileOps, &owner);

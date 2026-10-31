@@ -1672,77 +1672,61 @@ void ConfigManager::saveShortcuts(const QVariantMap &shortcuts)
     emit configChanged();
 }
 
-void ConfigManager::saveBookmarks(const QStringList &paths, const QVariantMap &names)
-{
-    m_bookmarks = paths;
-    m_bookmarkNames = names;
-    writeBookmarkTables(true, false);
-}
-
-void ConfigManager::saveSavedSplits(const QVariantList &splits)
-{
-    m_savedSplits = splits;
-    writeBookmarkTables(false, true);
-    emit savedSplitsChanged();
-}
-
-void ConfigManager::saveBookmarksAndSplits(const QStringList &paths, const QVariantMap &names,
-                                           const QVariantList &splits)
+void ConfigManager::saveBookmarks(const QStringList &paths, const QVariantMap &names,
+                                  const QVariantList &splits)
 {
     m_bookmarks = paths;
     m_bookmarkNames = names;
     m_savedSplits = splits;
-    writeBookmarkTables(true, true);
     emit savedSplitsChanged();
-}
 
-void ConfigManager::writeBookmarkTables(bool bookmarks, bool splits)
-{
     const bool wasWatchingConfig = m_watcher.files().contains(m_configPath);
     if (wasWatchingConfig)
         m_watcher.removePath(m_configPath);
 
-    // Read existing config or create new
+    // Read existing config or create new. One that does not parse is left
+    // alone: writing would replace the user's whole file with these tables.
     toml::table config;
     if (QFile::exists(m_configPath)) {
         try {
             config = toml::parse_file(m_configPath.toStdString());
-        } catch (...) {}
+        } catch (...) {
+            qWarning("config.toml does not parse; bookmarks not saved");
+            if (wasWatchingConfig)
+                m_watcher.addPath(m_configPath);
+            return;
+        }
     }
 
-    if (bookmarks) {
-        toml::array arr;
-        for (const auto &p : m_bookmarks)
-            arr.push_back(p.toStdString());
-        toml::table bookmarksTable{{"paths", std::move(arr)}};
-        if (!m_bookmarkNames.isEmpty()) {
-            toml::table nameTable;
-            for (auto it = m_bookmarkNames.cbegin(); it != m_bookmarkNames.cend(); ++it)
-                nameTable.insert_or_assign(it.key().toStdString(), it.value().toString().toStdString());
-            bookmarksTable.insert_or_assign("names", std::move(nameTable));
-        }
-        config.insert_or_assign("bookmarks", std::move(bookmarksTable));
+    toml::array pathArray;
+    for (const auto &p : m_bookmarks)
+        pathArray.push_back(p.toStdString());
+    toml::table bookmarksTable{{"paths", std::move(pathArray)}};
+    if (!m_bookmarkNames.isEmpty()) {
+        toml::table nameTable;
+        for (auto it = m_bookmarkNames.cbegin(); it != m_bookmarkNames.cend(); ++it)
+            nameTable.insert_or_assign(it.key().toStdString(), it.value().toString().toStdString());
+        bookmarksTable.insert_or_assign("names", std::move(nameTable));
     }
+    config.insert_or_assign("bookmarks", std::move(bookmarksTable));
 
-    if (splits) {
-        toml::array arr;
-        for (const auto &splitVar : m_savedSplits) {
-            const QVariantMap split = splitVar.toMap();
-            toml::table entry;
-            if (const auto name = split.value("name").toString(); !name.isEmpty())
-                entry.insert_or_assign("name", name.toStdString());
-            if (const auto primary = split.value("primaryPath").toString(); !primary.isEmpty())
-                entry.insert_or_assign("primary_path", primary.toStdString());
-            if (const auto secondary = split.value("secondaryPath").toString(); !secondary.isEmpty())
-                entry.insert_or_assign("secondary_path", secondary.toStdString());
-            if (const auto orientation = split.value("orientation").toString(); !orientation.isEmpty())
-                entry.insert_or_assign("orientation", orientation.toStdString());
-            if (split.contains("position"))
-                entry.insert_or_assign("position", split.value("position").toInt());
-            arr.push_back(std::move(entry));
-        }
-        config.insert_or_assign("saved_splits", toml::table{{"splits", std::move(arr)}});
+    toml::array splitArray;
+    for (const auto &splitVar : m_savedSplits) {
+        const QVariantMap split = splitVar.toMap();
+        toml::table entry;
+        if (const auto name = split.value("name").toString(); !name.isEmpty())
+            entry.insert_or_assign("name", name.toStdString());
+        if (const auto primary = split.value("primaryPath").toString(); !primary.isEmpty())
+            entry.insert_or_assign("primary_path", primary.toStdString());
+        if (const auto secondary = split.value("secondaryPath").toString(); !secondary.isEmpty())
+            entry.insert_or_assign("secondary_path", secondary.toStdString());
+        if (const auto orientation = split.value("orientation").toString(); !orientation.isEmpty())
+            entry.insert_or_assign("orientation", orientation.toStdString());
+        if (split.contains("position"))
+            entry.insert_or_assign("position", split.value("position").toInt());
+        splitArray.push_back(std::move(entry));
     }
+    config.insert_or_assign("saved_splits", toml::table{{"splits", std::move(splitArray)}});
 
     writeConfigDocument(m_configPath, config);
 

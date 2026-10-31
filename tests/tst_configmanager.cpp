@@ -21,14 +21,31 @@ private slots:
                         {"secondaryPath", "~/Flowchart"}, {"orientation", "horizontal"},
                         {"position", 1}}
         };
-        config.saveBookmarks({"~/Documents", "~/Downloads"});
-        config.saveSavedSplits(splits);
+        config.saveBookmarks({"~/Documents", "~/Downloads"}, {}, splits);
         ConfigManager restored(dir.path() + "/config.toml");
         QVariantMap expected = splits.first().toMap();
         expected["primaryPath"] = QDir::homePath() + "/Code";
         expected["secondaryPath"] = QDir::homePath() + "/Flowchart";
         QCOMPARE(restored.savedSplits(), QVariantList{expected});
         QCOMPARE(restored.bookmarks(), QStringList({"~/Documents", "~/Downloads"}));
+    }
+
+    // A config.toml that does not parse must not be replaced by the two
+    // bookmark tables alone, wiping the user's settings.
+    void testBrokenConfigIsNotOverwrittenByBookmarks()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.path() + "/config.toml";
+        ConfigManager config(path);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        const QByteArray broken = "[general]\ntheme = \"unterminated\n";
+        file.write(broken);
+        file.close();
+        QTest::ignoreMessage(QtWarningMsg, "config.toml does not parse; bookmarks not saved");
+        config.saveBookmarks({"~/Documents"}, {}, {});
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), broken);
     }
 
     void testLegacySplitKeysArePreserved()
@@ -46,7 +63,7 @@ private slots:
         QCOMPARE(split.value("name").toString(), QString("Code - Flowchart"));
         QCOMPARE(split.value("primaryPath").toString(), QDir::homePath() + "/Code");
         QCOMPARE(split.value("secondaryPath").toString(), QDir::homePath() + "/Flowchart");
-        config.saveSavedSplits(config.savedSplits());
+        config.saveBookmarks(config.bookmarks(), config.bookmarkNames(), config.savedSplits());
         ConfigManager restored(path);
         QCOMPARE(restored.savedSplits(), config.savedSplits());
     }
@@ -426,7 +443,7 @@ private slots:
         QCOMPARE(split.value("secondaryPath").toString(), QStringLiteral("/b"));
         QCOMPARE(split.value("orientation").toString(), QStringLiteral("horizontal"));
 
-        mgr.saveSavedSplits(mgr.savedSplits());
+        mgr.saveBookmarks(mgr.bookmarks(), mgr.bookmarkNames(), mgr.savedSplits());
         ConfigManager mgr2(path);
         QCOMPARE(mgr2.savedSplits(), mgr.savedSplits());
     }
@@ -479,14 +496,14 @@ private slots:
         ConfigManager mgr(path);
         QVERIFY(mgr.bookmarkNames().isEmpty());
 
-        mgr.saveBookmarks({"~/Projects", "~/Downloads"}, QVariantMap{{"~/Projects", "Work"}});
+        mgr.saveBookmarks({"~/Projects", "~/Downloads"}, QVariantMap{{"~/Projects", "Work"}}, {});
 
         ConfigManager mgr2(path);
         QCOMPARE(mgr2.bookmarks(), QStringList({"~/Projects", "~/Downloads"}));
         QCOMPARE(mgr2.bookmarkNames(), QVariantMap({{"~/Projects", "Work"}}));
 
         // Reverting to the auto name removes the entry rather than keeping a stale one.
-        mgr2.saveBookmarks({"~/Projects", "~/Downloads"}, QVariantMap());
+        mgr2.saveBookmarks({"~/Projects", "~/Downloads"}, QVariantMap(), {});
         ConfigManager mgr3(path);
         QVERIFY(mgr3.bookmarkNames().isEmpty());
     }
