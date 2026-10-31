@@ -1068,6 +1068,31 @@ private slots:
         }
     }
 
+    // Only Home itself closes a split. Reaching ~ any other way (breadcrumb,
+    // typed path, a terminal link) navigates the active pane and keeps it.
+    void testOnlyHomeClosesTheSplit()
+    {
+        App app;
+        QVERIFY(app.load());
+        auto *tab = app.tabModel->activeTab();
+        const QString sub = app.home.path() + "/sub";
+        QVERIFY(QDir().mkpath(sub));
+        tab->navigateTo(app.home.path());
+        tab->resetSecondaryTo(sub);
+        tab->setSplitViewEnabled(true);
+        QVERIFY(QMetaObject::invokeMethod(app.window, "setActivePane",
+                                          Q_ARG(QVariant, QStringLiteral("secondary"))));
+        QVERIFY(QMetaObject::invokeMethod(app.window, "navigateActivePaneTo",
+                                          Q_ARG(QVariant, QDir::homePath())));
+        QTRY_COMPARE(tab->secondaryCurrentPath(), QDir::homePath());
+        QVERIFY(tab->splitViewEnabled());
+        QCOMPARE(tab->currentPath(), app.home.path());
+
+        QVERIFY(QMetaObject::invokeMethod(app.window, "goHome"));
+        QTRY_VERIFY(!tab->splitViewEnabled());
+        QTRY_COMPARE(tab->currentPath(), QDir::homePath());
+    }
+
     // Completing "~/..." offers and inserts "~" paths, not the expanded home.
     void testPathBarCompletionKeepsTilde()
     {

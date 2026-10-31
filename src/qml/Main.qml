@@ -760,9 +760,15 @@ ApplicationWindow {
     }
 
     function navigateActivePaneTo(path) {
-        if (tabModel.activeTab && splitViewEnabled() && path === fsModel.homePath())
-            root.toggleSplitView()
         navigatePaneTo(activePane, path)
+    }
+
+    // Home (toolbar, shortcut, sidebar) closes a split and shows Home across
+    // the whole window. Other ways of reaching ~ keep the split.
+    function goHome() {
+        if (tabModel.activeTab && splitViewEnabled())
+            root.toggleSplitView()
+        navigatePaneTo(activePane, fsModel.homePath())
     }
 
     function openPathInNewTab(path) {
@@ -3546,7 +3552,7 @@ ApplicationWindow {
 
     Shortcut {
         sequence: config.shortcutMap["home"]
-        onActivated: root.navigateActivePaneTo(fsModel.homePath())
+        onActivated: root.goHome()
     }
 
     Shortcut {
@@ -4109,7 +4115,10 @@ ApplicationWindow {
                     trashPath: root.unifiedTrashPath
                     isRecentsView: root.isRecentsView
                     onBookmarkClicked: (path) => {
-                        root.navigateActivePaneTo(path)
+                        if (path === fsModel.homePath())
+                            root.goHome()
+                        else
+                            root.navigateActivePaneTo(path)
                     }
                     onSavedSplitClicked: (split) => {
                         root.restoreSavedSplit(split)
@@ -4253,9 +4262,7 @@ ApplicationWindow {
                 }
                 onEmptyTrashRequested: root.openDialog(emptyTrashConfirmDialogLoader)
                 onSplitRequested: (orientation) => root.toggleSplitInOrientation(orientation)
-                onHomeClicked: {
-                    root.navigateActivePaneTo(fsModel.homePath())
-                }
+                onHomeClicked: root.goHome()
                 onSearchClicked: root.openSearch()
                 onSearchClosed: root.closeSearch()
                 onSearchQueryChanged: (query) => root.handleSearchQuery(query)

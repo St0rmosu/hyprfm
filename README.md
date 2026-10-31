@@ -316,6 +316,9 @@ too.
 Only the first window keeps the saved session (tabs + window geometry);
 additional windows start fresh and leave it untouched.
 
+Home (toolbar button, shortcut or sidebar entry) closes an open split and
+shows Home across the full window.
+
 Right-click empty space in a split and choose **Save Split to Bookmarks**, or
 select two folders and choose **Save as Split View**, to keep both paths and
 their orientation as one bookmark. Split bookmarks can be
