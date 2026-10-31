@@ -336,20 +336,21 @@ ApplicationWindow {
         return tabModel.activeTab ? tabModel.activeTab.splitViewEnabled : false
     }
 
+    // Bumped on every bookmark change, including a config reload that swaps
+    // one split for another without changing the count.
+    property int bookmarksRevision: 0
+    Connections {
+        target: bookmarks
+        function onBookmarksChanged() { root.bookmarksRevision++ }
+        function onModelReset() { root.bookmarksRevision++ }
+    }
     readonly property bool activeSplitUnsaved: {
         var tab = tabModel.activeTab
-        var count = bookmarks.count
-        if (!tab || !tab.splitViewEnabled)
+        root.bookmarksRevision
+        if (!tab || !tab.splitViewEnabled || tab.currentPath === tab.secondaryCurrentPath)
             return false
-        var orientation = root.isSplitHorizontal ? "horizontal" : "vertical"
-        for (var i = 0; i < count; ++i) {
-            var split = bookmarks.splitAt(i)
-            if (split.primaryPath === tab.currentPath &&
-                    split.secondaryPath === tab.secondaryCurrentPath &&
-                    split.orientation === orientation)
-                return false
-        }
-        return true
+        return !bookmarks.containsSplit(tab.currentPath, tab.secondaryCurrentPath,
+                                        root.isSplitHorizontal ? "horizontal" : "vertical")
     }
 
     readonly property bool isSplitHorizontal: {
@@ -1021,21 +1022,25 @@ ApplicationWindow {
         root.updateSelectionStatus()
     }
 
-    function saveCurrentSplit() {
+    function saveCurrentSplit(index) {
         if (!tabModel.activeTab || !tabModel.activeTab.splitViewEnabled)
             return
 
         var tab = tabModel.activeTab
-        root.saveSplitPaths(tab.currentPath, tab.secondaryCurrentPath)
+        root.saveSplitPaths(tab.currentPath, tab.secondaryCurrentPath, undefined, index)
     }
 
-    function saveSplitPaths(primaryPath, secondaryPath, orientation) {
+    function saveSplitPaths(primaryPath, secondaryPath, orientation, index) {
         if (!primaryPath || !secondaryPath)
             return
-        var countBefore = bookmarks.count
-        bookmarks.addSplitBookmark(primaryPath, secondaryPath,
-            orientation || (root.isSplitHorizontal ? "horizontal" : "vertical"))
-        toast.show(bookmarks.count === countBefore ? "This split is already in bookmarks" : "Split added to bookmarks", "info")
+        if (primaryPath === secondaryPath) {
+            toast.show("Both panes show the same folder", "info")
+            return
+        }
+        var added = bookmarks.addSplitBookmark(primaryPath, secondaryPath,
+            orientation || (root.isSplitHorizontal ? "horizontal" : "vertical"), "",
+            index === undefined ? -1 : index)
+        toast.show(added ? "Split added to bookmarks" : "This split is already in bookmarks", "info")
     }
 
     function saveSelectedFolders(paths) {
@@ -4123,12 +4128,7 @@ ApplicationWindow {
                     onSavedSplitClicked: (split) => {
                         root.restoreSavedSplit(split)
                     }
-                    onSaveActiveSplitRequested: (index) => {
-                        var countBefore = bookmarks.count
-                        root.saveCurrentSplit()
-                        if (bookmarks.count > countBefore && index >= 0)
-                            bookmarks.moveBookmark(bookmarks.count - 1, index)
-                    }
+                    onSaveActiveSplitRequested: (index) => root.saveCurrentSplit(index)
                     onRenamingBookmarkIndexChanged: {
                         if (renamingBookmarkIndex < 0)
                             root.scheduleActivePaneFocus()

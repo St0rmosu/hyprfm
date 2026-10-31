@@ -962,7 +962,7 @@ private slots:
 
         QVERIFY(QMetaObject::invokeMethod(app.window, "saveSplitPaths",
                                           Q_ARG(QVariant, first), Q_ARG(QVariant, second),
-                                          Q_ARG(QVariant, orientation)));
+                                          Q_ARG(QVariant, orientation), Q_ARG(QVariant, -1)));
         QCOMPARE(app.bookmarks->rowCount(), 1);
         QVERIFY(!app.bookmarks->containsPath(first));
         QVERIFY(!app.bookmarks->containsPath(second));
@@ -1530,6 +1530,14 @@ private slots:
         QTRY_VERIFY(!tab->splitViewEnabled());
     }
 
+    static void showOtherFolderInSecondary(App &app)
+    {
+        const QString other = app.home.path() + "/other";
+        QVERIFY(QDir().mkpath(other));
+        app.tabModel->activeTab()->navigateSecondaryTo(other);
+        QTRY_COMPARE(app.tabModel->activeTab()->secondaryCurrentPath(), other);
+    }
+
     void testActiveSplitAppearsInSidebarUntilSaved()
     {
         App app;
@@ -1544,6 +1552,10 @@ private slots:
         QVERIFY(!sidebar->property("activeSplitVisible").toBool());
 
         QVERIFY(QMetaObject::invokeMethod(app.window, "toggleSplitView"));
+        // A new split shows the same folder twice: nothing worth saving yet.
+        QTRY_VERIFY(tab->splitViewEnabled());
+        QVERIFY(!sidebar->property("activeSplitVisible").toBool());
+        showOtherFolderInSecondary(app);
         QTRY_VERIFY(sidebar->property("activeSplitVisible").toBool());
         QVERIFY(emptyHint->isVisible());
         app.window->grabWindow();
@@ -1562,6 +1574,7 @@ private slots:
         App app;
         QVERIFY(app.load());
         QVERIFY(QMetaObject::invokeMethod(app.window, "toggleSplitView"));
+        showOtherFolderInSecondary(app);
         auto *activeSplit = app.item("activeSplitRow");
         auto *emptyHint = app.item("emptyBookmarksHint");
         QVERIFY(activeSplit && emptyHint);
@@ -1587,6 +1600,7 @@ private slots:
         app.bookmarks->addBookmark(folder);
         QCOMPARE(app.bookmarks->rowCount(), 1);
         QVERIFY(QMetaObject::invokeMethod(app.window, "toggleSplitView"));
+        showOtherFolderInSecondary(app);
         auto *activeSplit = app.item("activeSplitRow");
         QQuickItem *firstBookmark = nullptr;
         QTRY_VERIFY(firstBookmark = app.item("bookmark_0"));

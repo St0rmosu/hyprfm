@@ -36,6 +36,23 @@ private slots:
         QVERIFY(restored.savedSplits().isEmpty());
     }
 
+    // containsSplit matches what addSplitBookmark stored, whatever form the
+    // paths were given in; a split of one folder twice is not saved; an index
+    // inserts in place.
+    void testSplitLookupAndInsert()
+    {
+        BookmarkModel model;
+        model.addBookmark("~/Downloads");
+        QVERIFY(model.addSplitBookmark("sftp://host/My Docs", "~/Code", "vertical", {}, 0));
+        QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(model.splitAt(0).value("secondaryPath").toString(), QDir::homePath() + "/Code");
+        QVERIFY(model.containsSplit("sftp://host/My Docs", QDir::homePath() + "/Code/", "vertical"));
+        QVERIFY(!model.containsSplit("sftp://host/My Docs", "~/Code", "horizontal"));
+        QVERIFY(!model.addSplitBookmark("sftp://host/My Docs", "~/Code", "vertical"));
+        QVERIFY(!model.addSplitBookmark("~/Code", QDir::homePath() + "/Code/", "vertical"));
+        QCOMPARE(model.rowCount(), 2);
+    }
+
     void testLegacySavedSplitsBecomeBookmarks()
     {
         BookmarkModel model;

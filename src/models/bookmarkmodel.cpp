@@ -170,23 +170,33 @@ BookmarkModel::Bookmark BookmarkModel::makeSplitBookmark(const QString &primary,
     return bm;
 }
 
-void BookmarkModel::addSplitBookmark(const QString &primary, const QString &secondary,
-                                     const QString &orientation, const QString &name)
+bool BookmarkModel::containsSplit(const QString &primary, const QString &secondary,
+                                  const QString &orientation) const
 {
-    if (primary.isEmpty() || secondary.isEmpty())
-        return;
-    const Bookmark bm = makeSplitBookmark(primary, secondary, orientation, name);
+    const Bookmark bm = makeSplitBookmark(primary, secondary, orientation, {});
     for (const auto &existing : m_bookmarks) {
         if (existing.path == bm.path && existing.secondaryPath == bm.secondaryPath
             && existing.orientation == bm.orientation)
-            return;
+            return true;
     }
-    const int row = m_bookmarks.size();
+    return false;
+}
+
+bool BookmarkModel::addSplitBookmark(const QString &primary, const QString &secondary,
+                                     const QString &orientation, const QString &name, int index)
+{
+    if (primary.isEmpty() || secondary.isEmpty())
+        return false;
+    const Bookmark bm = makeSplitBookmark(primary, secondary, orientation, name);
+    if (bm.path == bm.secondaryPath || containsSplit(primary, secondary, orientation))
+        return false;
+    const int row = index < 0 || index > m_bookmarks.size() ? m_bookmarks.size() : index;
     beginInsertRows(QModelIndex(), row, row);
-    m_bookmarks.append(bm);
+    m_bookmarks.insert(row, bm);
     endInsertRows();
     emit countChanged();
     emit bookmarksChanged();
+    return true;
 }
 
 QVariantMap BookmarkModel::splitAt(int index) const
