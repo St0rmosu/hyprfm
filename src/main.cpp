@@ -1055,6 +1055,7 @@ int main(int argc, char *argv[])
     qmlRegisterType<TerminalView>("HyprFM", 1, 0, "TerminalView");
     TerminalView::setDesktopFont(desktop.monospaceFamily, desktop.monospacePointSize);
     shared->setContextProperty("hyprfmBuiltinTerminal", true);
+    shared->setContextProperty("terminalDefaultFontSize", TerminalView::defaultFontPointSize());
 #endif
 
     // The main window, compiled once and instantiated per window. The qrc

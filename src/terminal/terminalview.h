@@ -110,6 +110,8 @@ public:
     // The desktop's monospace font (the portal's monospace-font-name), the
     // default before any fontFamily/fontSize override.
     static void setDesktopFont(const QString &family, qreal pointSize);
+    // Point size used when terminal.font_size is 0 (the desktop's).
+    static qreal defaultFontPointSize();
     QColor foreground() const { return m_foreground; }
     void setForeground(const QColor &color);
     QColor background() const { return m_background; }

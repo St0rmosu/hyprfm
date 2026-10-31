@@ -804,14 +804,16 @@ Window {
             Q.Slider {
                 Layout.fillWidth: true
                 visible: terminalFontDropdown.visible
-                // The label column is 140 px: a longer one runs under the
-                // slider. 0 follows the desktop's monospace size.
+                // 0 in the config follows the desktop's monospace size, so
+                // show that size rather than 0.
                 label: "Terminal font size"
-                from: 0
+                from: 6
                 to: 32
                 stepSize: 1
                 showValue: true
-                value: root.draftTerminalFontSize
+                value: root.draftTerminalFontSize > 0 ? root.draftTerminalFontSize
+                    : (typeof terminalDefaultFontSize !== "undefined" && terminalDefaultFontSize > 0
+                       ? terminalDefaultFontSize : 11)
                 onMoved: (value) => {
                     root.draftTerminalFontSize = value
                     root.applySettingsNow()

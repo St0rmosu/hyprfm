@@ -243,6 +243,11 @@ bool decodePng(void *, const GhosttyAllocator *allocator, const uint8_t *data, s
 
 } // namespace
 
+qreal TerminalView::defaultFontPointSize()
+{
+    return defaultTerminalFont().pointSizeF();
+}
+
 TerminalView::TerminalView(QQuickItem *parent)
     : QQuickPaintedItem(parent)
     , m_font(defaultTerminalFont())
