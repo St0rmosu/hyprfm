@@ -1043,14 +1043,13 @@ ApplicationWindow {
     function saveSplitPaths(primaryPath, secondaryPath, orientation, index) {
         if (!primaryPath || !secondaryPath)
             return
-        if (primaryPath === secondaryPath) {
+        var orient = orientation || (root.isSplitHorizontal ? "horizontal" : "vertical")
+        if (bookmarks.addSplitBookmark(primaryPath, secondaryPath, orient, "", index === undefined ? -1 : index))
+            toast.show("Split added to bookmarks", "info")
+        else if (bookmarks.containsSplit(primaryPath, secondaryPath, orient))
+            toast.show("This split is already in bookmarks", "info")
+        else
             toast.show("Both panes show the same folder", "info")
-            return
-        }
-        var added = bookmarks.addSplitBookmark(primaryPath, secondaryPath,
-            orientation || (root.isSplitHorizontal ? "horizontal" : "vertical"), "",
-            index === undefined ? -1 : index)
-        toast.show(added ? "Split added to bookmarks" : "This split is already in bookmarks", "info")
     }
 
     function saveSelectedFolders(paths) {

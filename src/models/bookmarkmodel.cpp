@@ -173,10 +173,11 @@ BookmarkModel::Bookmark BookmarkModel::makeSplitBookmark(const QString &primary,
 bool BookmarkModel::containsSplit(const QString &primary, const QString &secondary,
                                   const QString &orientation) const
 {
-    const Bookmark bm = makeSplitBookmark(primary, secondary, orientation, {});
+    const QString first = expandPath(primary);
+    const QString second = expandPath(secondary);
+    const QString orient = orientation.toLower() == "horizontal" ? "horizontal" : "vertical";
     for (const auto &existing : m_bookmarks) {
-        if (existing.path == bm.path && existing.secondaryPath == bm.secondaryPath
-            && existing.orientation == bm.orientation)
+        if (existing.path == first && existing.secondaryPath == second && existing.orientation == orient)
             return true;
     }
     return false;
