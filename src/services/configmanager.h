@@ -177,6 +177,9 @@ public:
     Q_INVOKABLE void saveShortcuts(const QVariantMap &shortcuts);
     Q_INVOKABLE void saveBookmarks(const QStringList &paths, const QVariantMap &names = {});
     Q_INVOKABLE void saveSavedSplits(const QVariantList &splits);
+    // Both in one config.toml write, for every bookmark list change.
+    void saveBookmarksAndSplits(const QStringList &paths, const QVariantMap &names,
+                                const QVariantList &splits);
     Q_INVOKABLE void saveListColumns(const QStringList &columns, const QVariantMap &widths);
     Q_INVOKABLE void saveMillerFractions(double parent, double current);
     Q_INVOKABLE void saveSidebarWidth(int width);
@@ -190,6 +193,9 @@ signals:
     void iconRevisionChanged();
 
 private:
+    // Rewrites the [bookmarks] and/or [saved_splits] tables of config.toml
+    // from the current members, without the watcher reloading our own write.
+    void writeBookmarkTables(bool bookmarks, bool splits);
     void loadConfig();
     void setConfigError(const QString &message);
     // Empty when every custom action's `shortcut` parses and is unclaimed;

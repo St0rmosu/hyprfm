@@ -949,8 +949,7 @@ int main(int argc, char *argv[])
 
     // Persist bookmark changes to config
     QObject::connect(bookmarks, &BookmarkModel::bookmarksChanged, [=]() {
-        config->saveBookmarks(bookmarks->paths(), bookmarks->names());
-        config->saveSavedSplits(bookmarks->savedSplits());
+        config->saveBookmarksAndSplits(bookmarks->paths(), bookmarks->names(), bookmarks->savedSplits());
     });
 
     FileOperations *fileOps = new FileOperations(&app);
