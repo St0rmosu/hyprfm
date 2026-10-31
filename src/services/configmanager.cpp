@@ -339,6 +339,7 @@ void ConfigManager::setDefaults()
     m_splitOrientation = QStringLiteral("vertical");
     m_showHidden = false;
     m_hiddenLast = false;
+    m_gridFixedColumns = false;
     m_rightClickToEditPath = true;
     m_singleClickOpensFolders = false;
     m_builtinTerminal = false;
@@ -455,6 +456,8 @@ void ConfigManager::loadConfig()
             m_showHidden = *v;
         if (auto v = config["general"]["hidden_last"].value<bool>())
             m_hiddenLast = *v;
+        if (auto v = config["general"]["grid_fixed_columns"].value<bool>())
+            m_gridFixedColumns = *v;
         if (auto v = config["general"]["right_click_to_edit_path"].value<bool>())
             m_rightClickToEditPath = *v;
         if (auto v = config["general"]["single_click_opens_folders"].value<bool>())
@@ -747,6 +750,11 @@ show_hidden = false
 # Sort hidden files after the others (folders and files each keep their own
 # group) instead of letting the leading dot put them first.
 hidden_last = false
+
+# Grid zoom sets a column count and the icons grow and shrink with the
+# window, instead of keeping their size and fitting as many columns as the
+# window allows.
+grid_fixed_columns = false
 
 # Right click anywhere on the address bar enters path edit mode with the
 # whole path selected, just like Ctrl+L. Left clicks on breadcrumb segments
@@ -1046,6 +1054,7 @@ QString ConfigManager::splitOrientation() const { return m_splitOrientation; }
 bool ConfigManager::showHidden() const { return m_showHidden; }
 
 bool ConfigManager::hiddenLast() const { return m_hiddenLast; }
+bool ConfigManager::gridFixedColumns() const { return m_gridFixedColumns; }
 bool ConfigManager::rightClickToEditPath() const { return m_rightClickToEditPath; }
 bool ConfigManager::singleClickOpensFolders() const { return m_singleClickOpensFolders; }
 bool ConfigManager::builtinTerminal() const { return m_builtinTerminal; }
@@ -1306,6 +1315,11 @@ void ConfigManager::saveSettings(const QVariantMap &settings)
     if (settings.contains("hiddenLast")) {
         m_hiddenLast = settings.value("hiddenLast").toBool();
         general.insert_or_assign("hidden_last", m_hiddenLast);
+    }
+
+    if (settings.contains("gridFixedColumns")) {
+        m_gridFixedColumns = settings.value("gridFixedColumns").toBool();
+        general.insert_or_assign("grid_fixed_columns", m_gridFixedColumns);
     }
 
     if (settings.contains("rightClickToEditPath")) {

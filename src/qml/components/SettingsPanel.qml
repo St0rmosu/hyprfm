@@ -81,6 +81,7 @@ Window {
     property bool draftDarkMode: true
     property bool draftShowHidden: currentShowHidden
     property bool draftHiddenLast: config.hiddenLast
+    property bool draftGridFixedColumns: config.gridFixedColumns
     property bool draftRightClickToEditPath: config.rightClickToEditPath
     property bool draftSingleClickOpensFolders: config.singleClickOpensFolders
     property bool draftBuiltinTerminal: config.builtinTerminal
@@ -282,6 +283,7 @@ Window {
         draftAutoRefreshIcons = true
         draftShowHidden = false
         draftHiddenLast = false
+        draftGridFixedColumns = false
         draftRightClickToEditPath = true
         draftSingleClickOpensFolders = false
         draftBuiltinTerminal = false
@@ -338,6 +340,7 @@ Window {
 
             draftShowHidden = currentShowHidden
             draftHiddenLast = config.hiddenLast
+            draftGridFixedColumns = config.gridFixedColumns
             draftRightClickToEditPath = config.rightClickToEditPath
             draftSingleClickOpensFolders = config.singleClickOpensFolders
             draftBuiltinTerminal = config.builtinTerminal
@@ -421,6 +424,7 @@ Window {
             autoRefreshIcons: draftAutoRefreshIcons,
             showHidden: draftShowHidden,
             hiddenLast: draftHiddenLast,
+            gridFixedColumns: draftGridFixedColumns,
             rightClickToEditPath: draftRightClickToEditPath,
             singleClickOpensFolders: draftSingleClickOpensFolders,
             builtinTerminal: draftBuiltinTerminal,
@@ -981,6 +985,18 @@ Window {
                 stepSize: 1
                 value: gridSpan - (sessionState.gridColumns > 0 ? sessionState.gridColumns : 7)
                 onMoved: (value) => sessionState.gridColumns = gridSpan - Math.round(value)
+            }
+
+            Q.Toggle {
+                objectName: "gridFixedColumns"
+                Layout.fillWidth: true
+                // Off: icons keep their size and the window decides the columns.
+                label: "Grid icons resize with the window"
+                checked: root.draftGridFixedColumns
+                onToggled: (value) => {
+                    root.draftGridFixedColumns = value
+                    root.applySettingsNow()
+                }
             }
 
             Q.Slider {

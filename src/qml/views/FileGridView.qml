@@ -47,15 +47,23 @@ GridView {
     // big win; larger off-screen buffers just materialize thumbnails the
     // user may never scroll to.
     cacheBuffer: 512
-    // Zoom controls column count, not icon size
+    // Zoom picks an icon size and the window width decides how many columns
+    // fit, so resizing the window no longer resizes the icons (#61). The
+    // zoom step is still stored as a column count (2 = biggest, 12 =
+    // smallest): each step is the cell a 1600 px wide view would get with
+    // that many columns, so the default looks as it did on a typical window.
+    // grid_fixed_columns brings back the old way: zoom is the column count
+    // and the icons stretch to fill the width.
     property int columnCount: 7
     readonly property int minColumns: 2
     readonly property int maxColumns: 12
     readonly property int minCellWidth: 140
-    readonly property int effectiveColumnCount: Math.max(
-        minColumns,
-        Math.min(columnCount, Math.min(maxColumns, Math.max(1, Math.floor(width / minCellWidth))))
-    )
+    readonly property int targetCellSize: config.gridFixedColumns
+        ? Math.floor(width / effectiveColumnCount)
+        : Math.max(1, Math.min(width, Math.round(1600 / columnCount)))
+    readonly property int effectiveColumnCount: config.gridFixedColumns
+        ? Math.max(minColumns, Math.min(columnCount, Math.min(maxColumns, Math.max(1, Math.floor(width / minCellWidth)))))
+        : Math.max(1, Math.floor(width / targetCellSize))
     // Two lines of the label font, so a larger desktop font does not get
     // clipped: 32 px was exactly two lines at 10 pt and nothing more.
     readonly property int labelHeight: Math.round(32 * Theme.uiScale)
@@ -75,8 +83,9 @@ GridView {
     }
     readonly property int thumbnailRequestSize: 256 * Screen.devicePixelRatio
 
+    // Spare width is shared out between the columns.
     cellWidth: Math.floor(width / effectiveColumnCount)
-    cellHeight: cellWidth  // square cells
+    cellHeight: targetCellSize
     readonly property int iconSize: cellHeight - 8 - labelHeight - 5  // 8px top, 0px gap, 5px bottom
 
     focus: visible

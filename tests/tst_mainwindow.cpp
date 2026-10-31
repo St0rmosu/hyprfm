@@ -1219,6 +1219,42 @@ private slots:
         QTRY_COMPARE(app.sessionState->gridColumns(), 12);
     }
 
+    // Resizing the window changes how many grid columns fit, not the icon
+    // size (#61). grid_fixed_columns brings back the old column-count zoom,
+    // where the icons stretch with the window instead.
+    void testGridIconSizeFollowsZoomNotWindow()
+    {
+        App app;
+        QVERIFY(app.load());
+        auto *container = app.item("primaryFileView");
+        QVERIFY(container);
+        auto *grid = qvariant_cast<QQuickItem *>(container->property("gridViewItem"));
+        QVERIFY(grid);
+        auto *config = app.engine.rootContext()->contextProperty("config").value<QObject *>();
+
+        app.window->resize(1100, 700);
+        QTRY_VERIFY(grid->width() > 700);
+        const int wideIcon = grid->property("iconSize").toInt();
+        const int wideColumns = grid->property("effectiveColumnCount").toInt();
+        app.window->resize(700, 700);
+        QTRY_VERIFY(grid->property("effectiveColumnCount").toInt() < wideColumns);
+        QCOMPARE(grid->property("iconSize").toInt(), wideIcon);
+
+        // Zooming in still makes the icons bigger.
+        app.sessionState->setGridColumns(4);
+        QTRY_VERIFY(grid->property("iconSize").toInt() > wideIcon);
+
+        QVariantMap settings;
+        settings.insert(QStringLiteral("gridFixedColumns"), true);
+        QMetaObject::invokeMethod(config, "saveSettings", Q_ARG(QVariantMap, settings));
+        app.window->resize(1100, 700);
+        QTRY_COMPARE(grid->property("effectiveColumnCount").toInt(), 4);
+        const int fixedWideIcon = grid->property("iconSize").toInt();
+        app.window->resize(900, 700);
+        QTRY_VERIFY(grid->property("iconSize").toInt() < fixedWideIcon);
+        QCOMPARE(grid->property("effectiveColumnCount").toInt(), 4);
+    }
+
     // The Icon Size sliders sit on the Layout page (section 1), which lives in
     // a Loader. Dragging one has to move the zoom, and coming back to the page
     // has to show whatever the zoom is now — including a Ctrl+wheel made while

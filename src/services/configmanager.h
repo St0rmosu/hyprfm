@@ -26,6 +26,7 @@ class ConfigManager : public QObject
     Q_PROPERTY(QString splitOrientation READ splitOrientation NOTIFY configChanged)
     Q_PROPERTY(bool showHidden READ showHidden NOTIFY configChanged)
     Q_PROPERTY(bool hiddenLast READ hiddenLast NOTIFY configChanged)
+    Q_PROPERTY(bool gridFixedColumns READ gridFixedColumns NOTIFY configChanged)
     Q_PROPERTY(bool rightClickToEditPath READ rightClickToEditPath NOTIFY configChanged)
     Q_PROPERTY(bool singleClickOpensFolders READ singleClickOpensFolders NOTIFY configChanged)
     Q_PROPERTY(bool builtinTerminal READ builtinTerminal NOTIFY configChanged)
@@ -100,6 +101,7 @@ public:
     // Right click on the address bar starts path editing (Ctrl+L behaviour).
     // Clicking a breadcrumb segment still navigates.
     bool hiddenLast() const;
+    bool gridFixedColumns() const;
     bool rightClickToEditPath() const;
     bool singleClickOpensFolders() const;
     bool builtinTerminal() const;
@@ -222,6 +224,7 @@ private:
     QString m_splitOrientation;
     bool m_showHidden;
     bool m_hiddenLast;
+    bool m_gridFixedColumns;
     bool m_rightClickToEditPath;
     bool m_singleClickOpensFolders;
     bool m_builtinTerminal;
